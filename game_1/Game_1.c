@@ -1,4 +1,6 @@
 #include "Game_1.h"
+#include "camel_back_run_sprite.h"
+#include "camel_side_run_sprite.h"
 #include "InputHandler.h"
 #include "Menu.h"
 #include "LCD.h"
@@ -81,12 +83,15 @@ typedef struct {
 static RunnerState runner_state;
 static DesertObject objects[MAX_OBJECTS];
 static int player_lane;
+static int target_lane;
 static int player_x;
 static int score;
 static int high_score;
 static int spawn_timer;
 static int spawn_delay;
 static Direction last_direction;
+static int camel_run_frame;
+static int camel_anim_timer;
 
 typedef enum {
     CAMEL_BACK = 0,
@@ -95,7 +100,6 @@ typedef enum {
 } CamelPose;
 
 static CamelPose camel_pose;
-static int camel_turn_timer;
 
 static void reset_game(void);
 static void update_game(void);
@@ -115,13 +119,15 @@ static uint8_t joystick_right(Direction dir);
 static void reset_game(void)
 {
     player_lane = 1;       // start in middle lane
+    target_lane = player_lane;
     player_x = lane_x[player_lane];  // actual camel screen position starts in the middle
     score = 0;
     spawn_timer = 0;
     spawn_delay = 34;
     last_direction = CENTRE;
     camel_pose = CAMEL_BACK;
-    camel_turn_timer = 0;
+    camel_run_frame = 0;
+    camel_anim_timer = 0;
 
     for (int i = 0; i < MAX_OBJECTS; i++) {
         objects[i].active = 0;
@@ -188,19 +194,20 @@ static void update_game(void)
     Direction dir = joystick_data.direction;
 
     // Move only once per joystick push, not every frame while held.
-    // The lane changes first, then player_x smoothly moves toward that lane.
-    // While the camel is travelling between lanes it faces left/right.
-    // As soon as it reaches the new lane, it returns to the back view.
-    if (joystick_left(dir) && !joystick_left(last_direction)) {
-        if (player_lane > 0) {
-            player_lane--;
+    // The camel faces sideways while travelling, then returns to the back view
+    // after it arrives in the selected lane.
+    uint8_t camel_is_switching_lanes = (player_x != lane_x[target_lane]);
+
+    if (!camel_is_switching_lanes && joystick_left(dir) && !joystick_left(last_direction)) {
+        if (target_lane > 0) {
+            target_lane--;
             camel_pose = CAMEL_FACE_LEFT;
             buzzer_tone(&buzzer_cfg, 700, 15);
         }
     }
-    else if (joystick_right(dir) && !joystick_right(last_direction)) {
-        if (player_lane < 2) {
-            player_lane++;
+    else if (!camel_is_switching_lanes && joystick_right(dir) && !joystick_right(last_direction)) {
+        if (target_lane < 2) {
+            target_lane++;
             camel_pose = CAMEL_FACE_RIGHT;
             buzzer_tone(&buzzer_cfg, 700, 15);
         }
@@ -212,8 +219,8 @@ static void update_game(void)
     last_direction = dir;
 
     // Smooth lane-change animation.
-    int target_x = lane_x[player_lane];
-    int lane_step = 10;
+    int target_x = lane_x[target_lane];
+    int lane_step = 16;
 
     if (player_x < target_x) {
         player_x += lane_step;
@@ -228,9 +235,22 @@ static void update_game(void)
         }
     }
 
-    // Once the camel reaches the selected lane, show the normal back view again.
+    // Once the camel reaches the selected lane, make that lane active and show
+    // the normal back view again.
     if (player_x == target_x) {
+        player_lane = target_lane;
         camel_pose = CAMEL_BACK;
+    }
+
+    int anim_delay = (camel_pose == CAMEL_BACK) ? 4 : 1;
+
+    camel_anim_timer++;
+    if (camel_anim_timer >= anim_delay) {
+        camel_anim_timer = 0;
+        camel_run_frame++;
+        if (camel_run_frame >= CAMEL_BACK_RUN_FRAME_COUNT) {
+            camel_run_frame = 0;
+        }
     }
 
     score++;
@@ -292,25 +312,92 @@ static void update_game(void)
     PWM_SetDuty(&pwm_cfg, brightness);
 }
 
+static void draw_pyramid(int x, int y, int w, int h, uint8_t colour, uint8_t shade_colour)
+{
+    int centre = x + (w / 2);
+
+    for (int row = 0; row < h; row++) {
+        int half_width = (row * w) / (2 * h);
+        int yy = y + row;
+
+        LCD_Draw_Line(centre - half_width, yy, centre, yy, colour);
+        LCD_Draw_Line(centre, yy, centre + half_width, yy, shade_colour);
+    }
+
+    LCD_Draw_Line(centre, y, x, y + h, COL_BROWN);
+    LCD_Draw_Line(centre, y, x + w, y + h, COL_BROWN);
+    LCD_Draw_Line(x, y + h, x + w, y + h, COL_BROWN);
+}
+
+static void draw_background_cactus(int x, int y, uint8_t colour)
+{
+    LCD_Draw_Rect(x + 4, y, 4, 18, colour, 1);
+    LCD_Draw_Rect(x, y + 8, 5, 3, colour, 1);
+    LCD_Draw_Rect(x + 8, y + 5, 5, 3, colour, 1);
+    LCD_Draw_Rect(x, y + 5, 3, 6, colour, 1);
+    LCD_Draw_Rect(x + 10, y + 2, 3, 6, colour, 1);
+}
+
 static void draw_background(void)
 {
+    int dash_scroll = score % 24;
+    int sand_scroll = (score * 2) % 136;
+
     LCD_Fill_Buffer(COL_SAND);
 
     // Sky and sun
     LCD_Draw_Rect(0, 0, SCREEN_W, 78, COL_SKY, 1);
+    LCD_Draw_Circle(205, 28, 19, COL_ORANGE, 1);
     LCD_Draw_Circle(205, 28, 15, COL_YELLOW, 1);
 
-    // Desert horizon
-    LCD_Draw_Rect(0, 78, SCREEN_W, 8, COL_ORANGE, 1);
+    // Distant desert details
+    draw_pyramid(18, 49, 48, 34, COL_SAND, COL_ORANGE);
+    draw_pyramid(58, 57, 34, 25, COL_SAND, COL_ORANGE);
+    draw_pyramid(160, 53, 46, 31, COL_SAND, COL_ORANGE);
+    LCD_Draw_Circle(38, 98, 36, COL_SAND, 1);
+    LCD_Draw_Circle(112, 100, 42, COL_SAND, 1);
+    LCD_Draw_Circle(190, 99, 39, COL_SAND, 1);
+    LCD_Draw_Rect(0, 78, SCREEN_W, 6, COL_ORANGE, 1);
+    draw_background_cactus(13, 108, COL_CACTUS);
+    draw_background_cactus(214, 118, COL_CACTUS);
 
-    // Runner path
-    LCD_Draw_Rect(34, 86, 172, 150, COL_BROWN, 1);
+    // Runner path with slight perspective.
+    for (int y = 86; y < 236; y++) {
+        int spread = ((y - 86) * 16) / 150;
+        LCD_Draw_Line(34 - spread, y, 206 + spread, y, COL_BROWN);
+    }
+
     LCD_Draw_Line(34, 86, 18, 236, COL_BLACK);
     LCD_Draw_Line(206, 86, 222, 236, COL_BLACK);
 
-    // Lane dividers
-    LCD_Draw_Line(91, 88, 80, 236, COL_SAND);
-    LCD_Draw_Line(149, 88, 160, 236, COL_SAND);
+    // Scrolling path texture marks make the desert feel like it is moving.
+    for (int i = 0; i < 7; i++) {
+        int y = 96 + ((i * 23 + sand_scroll) % 136);
+        int x = 52 + ((i * 37) % 112);
+        int length = 10 + ((i % 3) * 4);
+
+        LCD_Draw_Line(x, y, x + length, y, COL_SAND);
+    }
+
+    // Dashed lane dividers scroll downward to show forward running.
+    for (int y = 92 + dash_scroll - 24; y < 230; y += 24) {
+        if (y < 88) {
+            continue;
+        }
+
+        int y2 = y + 13;
+        if (y2 > 236) {
+            y2 = 236;
+        }
+
+        int left_x1 = 91 - ((y - 88) * 11) / 148;
+        int left_x2 = 91 - ((y2 - 88) * 11) / 148;
+        int right_x1 = 149 + ((y - 88) * 11) / 148;
+        int right_x2 = 149 + ((y2 - 88) * 11) / 148;
+
+        LCD_Draw_Line(left_x1, y, left_x2, y2, COL_SAND);
+        LCD_Draw_Line(right_x1, y, right_x2, y2, COL_SAND);
+    }
 }
 
 static void draw_camel(int x, int y, CamelPose pose)
@@ -319,40 +406,16 @@ static void draw_camel(int x, int y, CamelPose pose)
     // Default view is from behind because the camel is running away from the player.
 
     if (pose == CAMEL_FACE_LEFT) {
-        // Side view, facing left for a short time after moving left.
-        LCD_Draw_Rect(x + 8,  y + 14, 22, 11, COL_CAMEL, 1);   // body
-        LCD_Draw_Circle(x + 15, y + 12, 7, COL_CAMEL, 1);      // hump 1
-        LCD_Draw_Circle(x + 24, y + 12, 7, COL_CAMEL, 1);      // hump 2
-        LCD_Draw_Rect(x + 3,  y + 10, 6, 14, COL_CAMEL, 1);    // neck
-        LCD_Draw_Rect(x - 3,  y + 7,  10, 8, COL_CAMEL, 1);    // head
-        LCD_Draw_Rect(x - 6,  y + 10, 4, 4, COL_NOSE, 1);      // nose
-        LCD_Draw_Rect(x + 10, y + 25, 4, 9, COL_BLACK, 1);     // leg
-        LCD_Draw_Rect(x + 24, y + 25, 4, 9, COL_BLACK, 1);     // leg
-        LCD_Draw_Rect(x + 1,  y + 8,  2, 2, COL_BLACK, 1);     // eye
+        LCD_Draw_Sprite(x + 4, y + 2, CAMEL_SIDE_RUN_H, CAMEL_SIDE_RUN_W,
+                        camel_side_right_frames[camel_run_frame]);
     }
     else if (pose == CAMEL_FACE_RIGHT) {
-        // Side view, facing right for a short time after moving right.
-        LCD_Draw_Rect(x + 6,  y + 14, 22, 11, COL_CAMEL, 1);   // body
-        LCD_Draw_Circle(x + 12, y + 12, 7, COL_CAMEL, 1);      // hump 1
-        LCD_Draw_Circle(x + 21, y + 12, 7, COL_CAMEL, 1);      // hump 2
-        LCD_Draw_Rect(x + 28, y + 10, 6, 14, COL_CAMEL, 1);    // neck
-        LCD_Draw_Rect(x + 32, y + 7,  10, 8, COL_CAMEL, 1);    // head
-        LCD_Draw_Rect(x + 40, y + 10, 4, 4, COL_NOSE, 1);      // nose
-        LCD_Draw_Rect(x + 10, y + 25, 4, 9, COL_BLACK, 1);     // leg
-        LCD_Draw_Rect(x + 24, y + 25, 4, 9, COL_BLACK, 1);     // leg
-        LCD_Draw_Rect(x + 34, y + 8,  2, 2, COL_BLACK, 1);     // eye
+        LCD_Draw_Sprite(x + 4, y + 2, CAMEL_SIDE_RUN_H, CAMEL_SIDE_RUN_W,
+                        camel_side_left_frames[camel_run_frame]);
     }
     else {
-        // Back view: symmetrical body, head in the middle, legs below.
-        LCD_Draw_Rect(x + 7,  y + 14, 26, 12, COL_CAMEL, 1);   // body from behind
-        LCD_Draw_Circle(x + 14, y + 12, 7, COL_CAMEL, 1);      // left hump
-        LCD_Draw_Circle(x + 26, y + 12, 7, COL_CAMEL, 1);      // right hump
-        LCD_Draw_Rect(x + 15, y + 5,  10, 11, COL_CAMEL, 1);   // neck/head from behind
-        LCD_Draw_Rect(x + 11, y + 7,  4, 5, COL_CAMEL, 1);     // left ear
-        LCD_Draw_Rect(x + 25, y + 7,  4, 5, COL_CAMEL, 1);     // right ear
-        LCD_Draw_Rect(x + 11, y + 26, 4, 8, COL_BLACK, 1);     // left back leg
-        LCD_Draw_Rect(x + 25, y + 26, 4, 8, COL_BLACK, 1);     // right back leg
-        LCD_Draw_Rect(x + 19, y + 22, 3, 4, COL_NOSE, 1);      // small tail/detail
+        LCD_Draw_Sprite(x + 4, y + 2, CAMEL_BACK_RUN_H, CAMEL_BACK_RUN_W,
+                        camel_back_run_frames[camel_run_frame]);
     }
 }
 

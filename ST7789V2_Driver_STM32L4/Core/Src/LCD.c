@@ -35,10 +35,10 @@ static const uint16_t palette_custom[16] = {
     RGB565_BLACK,      // 0
     RGB565_WHITE,      // 1
     0x796B,            // 2  final blue
-    0xAEDD,            // 3  final brown
-    0xDD0C,            // 4  camel tan
-    0xEE54,            // 5  camel nose
-    0xEEF4,            // 6  pale cream
+    0x857A,            // 3  camel shadow brown
+    0x4CDD,            // 4  camel tan
+    0x95EC,            // 5  camel nose
+    0xBAEF,            // 6  pale cream / sand
     0xEE19,            // 7  light pink
     0xBD99,            // 8  lavender
     0x94B2,            // 9  grey
