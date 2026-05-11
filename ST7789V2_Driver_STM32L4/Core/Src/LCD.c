@@ -38,7 +38,7 @@ static const uint16_t palette_custom[16] = {
     0x857A,            // 3  camel shadow brown
     0x4CDD,            // 4  camel tan
     0x95EC,            // 5  camel nose
-    0xBAEF,            // 6  pale cream / sand
+    0xEDE5,            // 6  warm sand highlight
     0xEE19,            // 7  light pink
     0xBD99,            // 8  lavender
     0x94B2,            // 9  grey
@@ -48,6 +48,66 @@ static const uint16_t palette_custom[16] = {
     RGB565_BLUE,       // 13
     RGB565_YELLOW,     // 14
     RGB565_ORANGE      // 15
+};
+
+// Game 1 gameplay palette, tuned from Hamoodi and the collectible/obstacle PNGs.
+static const uint16_t palette_game1_play[16] = {
+    0x0000,            // 0  black
+    0xFFFF,            // 1  white
+    0xB554,            // 2  water / sky blue
+    0x6441,            // 3  Hamoodi dark brown
+    0x4CDD,            // 4  Hamoodi tan
+    0x95EC,            // 5  Hamoodi pink / nose
+    0xCEED,            // 6  Hamoodi highlight
+    0x4AB4,            // 7  Hamoodi shadow
+    0x2793,            // 8  Hamoodi deep shadow
+    0xA541,            // 9  rock brown
+    0x212D,            // 10 cactus green
+    0xA2D0,            // 11 heart red
+    0x211B,            // 12 cactus dark green
+    0xB51A,            // 13 water blue
+    0x24EE,            // 14 coin yellow
+    0xA4EC             // 15 coin/date orange
+};
+
+// Game 1 game-over palette, mapped directly from the submitted Piskel image.
+static const uint16_t palette_game1_game_over[16] = {
+    0x0000,            // 0  black
+    0xFFFF,            // 1  white
+    0x6AFE,            // 2  golden sky
+    0xA39B,            // 3  dark mountain
+    0xA6C4,            // 4  mid mountain
+    0x6DFE,            // 5  light mountain highlight
+    0x68E5,            // 6  warm mountain highlight
+    0x00F5,            // 7  sun orange
+    0x66BC,            // 8  tiny mountain shade
+    0x04F9,            // 9  game-over red
+    0x6AFE,            // 10 spare golden sky
+    0x04F9,            // 11 red text
+    0xA39B,            // 12 spare dark mountain
+    0xA6C4,            // 13 spare mid mountain
+    0x6DFE,            // 14 spare light highlight
+    0x00F5             // 15 spare sun orange
+};
+
+// Game 1 start screen palette, preserving the submitted Piskel start screen colours.
+static const uint16_t palette_game1_start[16] = {
+    0x0000,            // 0  black
+    0xFFFF,            // 1  white
+    0x6AFE,            // 2  golden sky
+    0xA39B,            // 3  dark mountain
+    0xA6C4,            // 4  mid mountain
+    0xB885,            // 5  title blue
+    0x68E5,            // 6  warm mountain highlight
+    0x00F5,            // 7  sun orange
+    0x2E8C,            // 8  grey detail
+    0x6DFE,            // 9  light mountain highlight
+    0x66BC,            // 10 tiny mountain shade
+    0x6441,            // 11 Hamoodi dark brown
+    0x4CDD,            // 12 Hamoodi tan
+    0x4AB4,            // 13 Hamoodi shadow
+    0x2793,            // 14 Hamoodi deep shadow
+    0xCEED             // 15 Hamoodi highlight
 };
 
 // Active palette pointer (defaults to palette_default)
@@ -93,6 +153,15 @@ void LCD_Set_Palette(LCD_Palette palette) {
       break;
     case PALETTE_CUSTOM:
       colour_map = palette_custom;
+      break;
+    case PALETTE_GAME1_PLAY:
+      colour_map = palette_game1_play;
+      break;
+    case PALETTE_GAME1_GAME_OVER:
+      colour_map = palette_game1_game_over;
+      break;
+    case PALETTE_GAME1_START:
+      colour_map = palette_game1_start;
       break;
     case PALETTE_DEFAULT:
     default:
