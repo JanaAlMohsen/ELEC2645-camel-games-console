@@ -1,4 +1,5 @@
 #include "Game_1.h"
+#include "camel_action_sprite.h"
 #include "camel_back_run_sprite.h"
 #include "camel_side_run_sprite.h"
 #include "game_over_screen_sprite.h"
@@ -82,7 +83,9 @@ typedef enum {
 typedef enum {
     OBJ_ROCK = 0,
     OBJ_CACTUS,
-    OBJ_SKULL,
+    OBJ_SNAKE,
+    OBJ_EAGLE,
+    OBJ_CRACK,
     OBJ_DATE,
     OBJ_WATER,
     OBJ_COIN
@@ -142,13 +145,16 @@ static void draw_background(void);
 static void draw_camel(int x, int y, CamelPose pose);
 static void draw_rock(int x, int y);
 static void draw_cactus(int x, int y);
-static void draw_skull(int x, int y);
+static void draw_snake(int x, int y);
+static void draw_eagle(int x, int y);
+static void draw_crack(int x, int y);
 static void draw_date(int x, int y);
 static void draw_water_drop(int x, int y);
 static void draw_coin(int x, int y);
 static void draw_hud_heart(int x, int y);
 static void print_outlined(char const *text, uint16_t x, uint16_t y, uint8_t colour, uint8_t outline_colour, uint8_t font_size);
 static uint8_t object_is_collectible(ObjectType type);
+static uint8_t object_is_dodged(DesertObject const *obj);
 static uint8_t object_hits_player(DesertObject *obj);
 static uint8_t joystick_left(Direction dir);
 static uint8_t joystick_right(Direction dir);
@@ -342,7 +348,7 @@ static void spawn_object(void)
             objects[i].y = 28;
 
             // Most objects are dangerous, with occasional collectible bonuses.
-            int r = rand() % 14;
+            int r = rand() % 18;
             if (r == 0) {
                 objects[i].type = OBJ_WATER;
             }
@@ -352,11 +358,17 @@ static void spawn_object(void)
             else if (r == 3) {
                 objects[i].type = OBJ_DATE;
             }
-            else if (r == 4 || r == 5 || r == 6 || r == 7) {
+            else if (r == 4 || r == 5) {
+                objects[i].type = OBJ_EAGLE;
+            }
+            else if (r == 6 || r == 7) {
+                objects[i].type = OBJ_CRACK;
+            }
+            else if (r == 8 || r == 9 || r == 10) {
                 objects[i].type = OBJ_CACTUS;
             }
-            else if (r == 8 || r == 9) {
-                objects[i].type = OBJ_SKULL;
+            else if (r == 11 || r == 12) {
+                objects[i].type = OBJ_SNAKE;
             }
             else {
                 objects[i].type = OBJ_ROCK;
@@ -369,6 +381,12 @@ static void spawn_object(void)
 static uint8_t object_is_collectible(ObjectType type)
 {
     return (type == OBJ_DATE || type == OBJ_WATER || type == OBJ_COIN);
+}
+
+static uint8_t object_is_dodged(DesertObject const *obj)
+{
+    return ((obj->type == OBJ_EAGLE && camel_action == CAMEL_ACTION_DUCK) ||
+            (obj->type == OBJ_CRACK && camel_action == CAMEL_ACTION_JUMP));
 }
 
 static uint8_t object_hits_player(DesertObject *obj)
@@ -504,7 +522,12 @@ static void update_game(void)
         objects[i].y += speed;
 
         if (object_hits_player(&objects[i])) {
-            if (object_is_collectible(objects[i].type)) {
+            if (object_is_dodged(&objects[i])) {
+                score += 10 * score_multiplier;
+                objects[i].active = 0;
+                play_sfx(980, 8, 3);
+            }
+            else if (object_is_collectible(objects[i].type)) {
                 if (objects[i].type == OBJ_DATE) {
                     score_multiplier_timer = DATE_MULTIPLIER_FRAMES;
                     play_sfx(1200, 12, 4);
@@ -643,8 +666,13 @@ static void draw_background(void)
 
 static void draw_camel(int x, int y, CamelPose pose)
 {
-    // Camel drawn using simple shapes so no extra bitmap file is needed.
     // Default view is from behind because the camel is running away from the player.
+    // Jump/duck use a special flat Hamoodi sprite drawn by the same action controls.
+    if (camel_action != CAMEL_ACTION_NORMAL) {
+        LCD_Draw_Sprite(x + 4, y + 2, CAMEL_ACTION_SPRITE_H, CAMEL_ACTION_SPRITE_W,
+                        camel_action_sprite);
+        return;
+    }
 
     if (pose == CAMEL_FACE_LEFT) {
         int side_frame = camel_run_frame % CAMEL_SIDE_RUN_FRAME_COUNT;
@@ -673,9 +701,19 @@ static void draw_cactus(int x, int y)
     LCD_Draw_Sprite(x, y, GAME1_OBJECT_SPRITE_H, GAME1_OBJECT_SPRITE_W, cactus_sprite);
 }
 
-static void draw_skull(int x, int y)
+static void draw_snake(int x, int y)
 {
-    LCD_Draw_Sprite(x, y, GAME1_OBJECT_SPRITE_H, GAME1_OBJECT_SPRITE_W, skull_sprite);
+    LCD_Draw_Sprite(x, y, GAME1_OBJECT_SPRITE_H, GAME1_OBJECT_SPRITE_W, snake_sprite);
+}
+
+static void draw_eagle(int x, int y)
+{
+    LCD_Draw_Sprite(x, y, GAME1_OBJECT_SPRITE_H, GAME1_OBJECT_SPRITE_W, eagle_sprite);
+}
+
+static void draw_crack(int x, int y)
+{
+    LCD_Draw_Sprite(x, y, GAME1_OBJECT_SPRITE_H, GAME1_OBJECT_SPRITE_W, crack_sprite);
 }
 
 static void draw_date(int x, int y)
@@ -750,10 +788,10 @@ static void render_game(void)
     draw_background();
 
     sprintf(text, "Score:%d", score);
-    LCD_printString(text, 5, 6, COL_BLACK, 1);
+    print_outlined(text, 5, 6, COL_WHITE, COL_BLACK, 1);
 
     sprintf(text, "Best:%d", high_score);
-    LCD_printString(text, 150, 6, COL_BLACK, 1);
+    print_outlined(text, 150, 6, COL_WHITE, COL_BLACK, 1);
 
     for (int i = 0; i < lives; i++) {
         draw_hud_heart(75 + (i * 16), 0);
@@ -777,8 +815,14 @@ static void render_game(void)
         else if (objects[i].type == OBJ_CACTUS) {
             draw_cactus(x, y);
         }
-        else if (objects[i].type == OBJ_SKULL) {
-            draw_skull(x, y);
+        else if (objects[i].type == OBJ_SNAKE) {
+            draw_snake(x, y);
+        }
+        else if (objects[i].type == OBJ_EAGLE) {
+            draw_eagle(x, y);
+        }
+        else if (objects[i].type == OBJ_CRACK) {
+            draw_crack(x, y);
         }
         else if (objects[i].type == OBJ_DATE) {
             draw_date(x, y);
