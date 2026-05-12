@@ -614,6 +614,7 @@ MenuState Game2_Run(void)
     static uint32_t last_decay = 0;
 
     RGB_Off();
+    LCD_Set_Palette(PALETTE_CUSTOM);
     current_screen = PET_SCREEN_DASHBOARD;
     bedroom_sleeping = 0;
 

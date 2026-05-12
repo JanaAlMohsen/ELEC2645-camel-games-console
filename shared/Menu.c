@@ -3,6 +3,7 @@
 #include "InputHandler.h"
 #include "Joystick.h"
 #include "Buzzer.h"
+#include "menu_background_sprite.h"
 #include "stm32l4xx_hal.h"
 #include <stdio.h>
 
@@ -19,6 +20,23 @@ static const char* menu_options[] = {
 
 #define NUM_MENU_OPTIONS 2
 #define MENU_FRAME_TIME_MS 30
+#define MENU_COL_BLACK 0
+#define MENU_COL_WHITE 1
+#define MENU_COL_SKY 2
+#define MENU_COL_BROWN 3
+#define MENU_COL_DARK_BROWN 4
+#define MENU_COL_GOLD 5
+
+static void menu_print_outlined(char const *text, uint16_t x, uint16_t y,
+                                uint8_t colour, uint8_t outline_colour,
+                                uint8_t font_size)
+{
+    LCD_printString((char*)text, x - 1, y, outline_colour, font_size);
+    LCD_printString((char*)text, x + 1, y, outline_colour, font_size);
+    LCD_printString((char*)text, x, y - 1, outline_colour, font_size);
+    LCD_printString((char*)text, x, y + 1, outline_colour, font_size);
+    LCD_printString((char*)text, x, y, colour, font_size);
+}
 
 static void menu_note(Buzzer_Note_t note, uint32_t duration_ms)
 {
@@ -65,36 +83,33 @@ static void menu_led_white(void)
 
 static void render_home_menu(MenuSystem* menu)
 {
-    LCD_Fill_Buffer(2);
-
-    LCD_Draw_Rect(0, 148, 240, 92, 3, 1);
-    for (uint8_t i = 0; i < 7; i++) {
-        LCD_Draw_Line(40 + i * 24, 178, 28 + i * 24, 188, 7);
-    }
-    LCD_Draw_Circle(120, 160, 48, 7, 1);
-    LCD_Draw_Rect(70, 160, 100, 26, 7, 1);
-
-    LCD_printString("Tame", 72, 18, 3, 4);
-    LCD_printString("game console", 58, 52, 0, 1);
+    LCD_Set_Palette(PALETTE_MENU);
+    LCD_Draw_Sprite(0, 0, MENU_BACKGROUND_H, MENU_BACKGROUND_W,
+                    menu_background_sprite);
 
     for (int i = 0; i < NUM_MENU_OPTIONS; i++) {
-        uint16_t y_pos = 82 + (i * 48);
-        uint8_t fill_colour = (i == menu->selected_option) ? 6 : 7;
-        uint8_t text_colour = (i == menu->selected_option) ? 3 : 0;
+        uint16_t y_pos = 86 + (i * 46);
+        uint8_t selected = (i == menu->selected_option);
+        uint8_t fill_colour = selected ? MENU_COL_WHITE : MENU_COL_SKY;
+        uint8_t text_colour = selected ? MENU_COL_DARK_BROWN : MENU_COL_WHITE;
+        uint8_t outline_colour = selected ? MENU_COL_GOLD : MENU_COL_BROWN;
 
-        LCD_Draw_Rect(30, y_pos, 180, 34, fill_colour, 1);
-        LCD_Draw_Rect(30, y_pos, 180, 34, 3, 0);
+        LCD_Draw_Rect(28, y_pos, 184, 34, fill_colour, 1);
+        LCD_Draw_Rect(28, y_pos, 184, 34, MENU_COL_BROWN, 0);
 
-        if (i == menu->selected_option) {
-            LCD_Draw_Rect(36, y_pos + 8, 12, 18, 3, 1);
-            LCD_printString(">", 40, y_pos + 13, 1, 1);
+        if (selected) {
+            LCD_Draw_Rect(38, y_pos + 8, 12, 18, MENU_COL_BROWN, 1);
+            LCD_printString(">", 42, y_pos + 13, MENU_COL_WHITE, 1);
         }
 
-        LCD_printString((char*)menu_options[i], 58, y_pos + 10, text_colour, 2);
+        menu_print_outlined(menu_options[i], 58, y_pos + 9, text_colour,
+                            outline_colour, 2);
     }
 
-    LCD_printString("up/down", 76, 206, 1, 1);
-    LCD_printString("BTN2 select", 66, 222, 1, 1);
+    menu_print_outlined("UP/DOWN MOVE", 82, 204, MENU_COL_WHITE,
+                        MENU_COL_BROWN, 1);
+    menu_print_outlined("BT2 SELECT", 90, 222, MENU_COL_WHITE,
+                        MENU_COL_BROWN, 1);
 
     LCD_Refresh(&cfg0);
 }

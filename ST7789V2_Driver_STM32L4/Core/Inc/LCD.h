@@ -134,7 +134,8 @@ typedef enum {
     PALETTE_CUSTOM = 3,
     PALETTE_GAME1_PLAY = 4,
     PALETTE_GAME1_GAME_OVER = 5,
-    PALETTE_GAME1_START = 6
+    PALETTE_GAME1_START = 6,
+    PALETTE_MENU = 7
 } LCD_Palette;
 
 /* Set Colour Palette

@@ -3,9 +3,11 @@
 #include "camel_back_run_sprite.h"
 #include "camel_side_run_sprite.h"
 #include "game_over_screen_sprite.h"
+#include "gameplay_background_sprite.h"
 #include "object_sprites.h"
 #include "start_hamoodi_sprite.h"
 #include "start_screen_sprite.h"
+#include "street_overlay_sprite.h"
 #include "InputHandler.h"
 #include "Menu.h"
 #include "LCD.h"
@@ -279,9 +281,10 @@ static int get_camel_draw_y(void)
 static void rgb_write_led(int led, uint8_t r, uint8_t g, uint8_t b)
 {
     if (led == 0) {
-        HAL_GPIO_WritePin(RGB1_R_PORT, RGB1_R_PIN, r ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        // Observed RGB1 wiring: PA9=blue, PC7=green, PC8=red.
+        HAL_GPIO_WritePin(RGB1_R_PORT, RGB1_R_PIN, b ? GPIO_PIN_SET : GPIO_PIN_RESET);
         HAL_GPIO_WritePin(RGB1_G_PORT, RGB1_G_PIN, g ? GPIO_PIN_SET : GPIO_PIN_RESET);
-        HAL_GPIO_WritePin(RGB1_B_PORT, RGB1_B_PIN, b ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(RGB1_B_PORT, RGB1_B_PIN, r ? GPIO_PIN_SET : GPIO_PIN_RESET);
     }
     else {
         HAL_GPIO_WritePin(RGB2_R_PORT, RGB2_R_PIN, r ? GPIO_PIN_SET : GPIO_PIN_RESET);
@@ -511,7 +514,6 @@ static void update_game(void)
             camel_pose = CAMEL_FACE_LEFT;
             camel_run_frame = 0;
             camel_anim_timer = 0;
-            play_sfx(700, 8, 3);
         }
     }
     else if (!camel_is_switching_lanes && joystick_right(dir) && !joystick_right(last_direction)) {
@@ -520,19 +522,16 @@ static void update_game(void)
             camel_pose = CAMEL_FACE_RIGHT;
             camel_run_frame = 0;
             camel_anim_timer = 0;
-            play_sfx(700, 8, 3);
         }
     }
 
     if (camel_action == CAMEL_ACTION_NORMAL && joystick_up(dir) && !joystick_up(last_direction)) {
         camel_action = CAMEL_ACTION_JUMP;
         camel_action_timer = CAMEL_JUMP_FRAMES;
-        play_sfx(1100, 8, 3);
     }
     else if (camel_action == CAMEL_ACTION_NORMAL && joystick_down(dir) && !joystick_down(last_direction)) {
         camel_action = CAMEL_ACTION_DUCK;
         camel_action_timer = CAMEL_DUCK_FRAMES;
-        play_sfx(520, 8, 3);
     }
 
     last_direction = dir;
@@ -647,12 +646,12 @@ static void update_game(void)
                     if (lives < MAX_LIVES) {
                         lives++;
                     }
-                    rgb_start_flash(0, 0, 0, 1, 18, 3);
+                    rgb_start_flash(1, 0, 0, 1, 18, 3);
                     play_sfx(1500, 13, 4);
                 }
                 else {
                     score += COIN_BONUS_POINTS * score_multiplier;
-                    rgb_start_flash(1, 1, 1, 0, 16, 3);
+                    rgb_start_flash(1, 0, 0, 1, 16, 3);
                     play_sfx(1700, 13, 4);
                 }
 
@@ -693,92 +692,12 @@ static void update_game(void)
     PWM_SetDuty(&pwm_cfg, brightness);
 }
 
-static void draw_pyramid(int x, int y, int w, int h, uint8_t colour, uint8_t shade_colour)
-{
-    int centre = x + (w / 2);
-
-    for (int row = 0; row < h; row++) {
-        int half_width = (row * w) / (2 * h);
-        int yy = y + row;
-
-        LCD_Draw_Line(centre - half_width, yy, centre, yy, colour);
-        LCD_Draw_Line(centre, yy, centre + half_width, yy, shade_colour);
-    }
-
-    LCD_Draw_Line(centre, y, x, y + h, COL_BROWN);
-    LCD_Draw_Line(centre, y, x + w, y + h, COL_BROWN);
-    LCD_Draw_Line(x, y + h, x + w, y + h, COL_BROWN);
-}
-
-static void draw_background_cactus(int x, int y, uint8_t colour)
-{
-    LCD_Draw_Rect(x + 4, y, 4, 18, colour, 1);
-    LCD_Draw_Rect(x, y + 8, 5, 3, colour, 1);
-    LCD_Draw_Rect(x + 8, y + 5, 5, 3, colour, 1);
-    LCD_Draw_Rect(x, y + 5, 3, 6, colour, 1);
-    LCD_Draw_Rect(x + 10, y + 2, 3, 6, colour, 1);
-}
-
 static void draw_background(void)
 {
-    int dash_scroll = score % 24;
-    int sand_scroll = (score * 2) % 136;
-
-    LCD_Fill_Buffer(COL_CAMEL);
-
-    // Sky and sun
-    LCD_Draw_Rect(0, 0, SCREEN_W, 78, COL_SKY, 1);
-    LCD_Draw_Circle(205, 28, 19, COL_ORANGE, 1);
-    LCD_Draw_Circle(205, 28, 15, COL_YELLOW, 1);
-
-    // Distant desert details
-    draw_pyramid(18, 49, 48, 34, COL_CAMEL, COL_ORANGE);
-    draw_pyramid(58, 57, 34, 25, COL_CAMEL, COL_ORANGE);
-    draw_pyramid(160, 53, 46, 31, COL_CAMEL, COL_ORANGE);
-    LCD_Draw_Circle(38, 98, 36, COL_CAMEL, 1);
-    LCD_Draw_Circle(112, 100, 42, COL_CAMEL, 1);
-    LCD_Draw_Circle(190, 99, 39, COL_CAMEL, 1);
-    LCD_Draw_Rect(0, 78, SCREEN_W, 6, COL_ORANGE, 1);
-    draw_background_cactus(13, 108, COL_CACTUS);
-    draw_background_cactus(214, 118, COL_CACTUS);
-
-    // Runner path with slight perspective.
-    for (int y = 86; y < 236; y++) {
-        int spread = ((y - 86) * 16) / 150;
-        LCD_Draw_Line(34 - spread, y, 206 + spread, y, COL_BROWN);
-    }
-
-    LCD_Draw_Line(34, 86, 18, 236, COL_BLACK);
-    LCD_Draw_Line(206, 86, 222, 236, COL_BLACK);
-
-    // Scrolling path texture marks make the desert feel like it is moving.
-    for (int i = 0; i < 7; i++) {
-        int y = 96 + ((i * 23 + sand_scroll) % 136);
-        int x = 52 + ((i * 37) % 112);
-        int length = 10 + ((i % 3) * 4);
-
-        LCD_Draw_Line(x, y, x + length, y, COL_SAND);
-    }
-
-    // Dashed lane dividers scroll downward to show forward running.
-    for (int y = 92 + dash_scroll - 24; y < 230; y += 24) {
-        if (y < 88) {
-            continue;
-        }
-
-        int y2 = y + 13;
-        if (y2 > 236) {
-            y2 = 236;
-        }
-
-        int left_x1 = 91 - ((y - 88) * 11) / 148;
-        int left_x2 = 91 - ((y2 - 88) * 11) / 148;
-        int right_x1 = 149 + ((y - 88) * 11) / 148;
-        int right_x2 = 149 + ((y2 - 88) * 11) / 148;
-
-        LCD_Draw_Line(left_x1, y, left_x2, y2, COL_SAND);
-        LCD_Draw_Line(right_x1, y, right_x2, y2, COL_SAND);
-    }
+    LCD_Draw_Sprite(0, 0, GAMEPLAY_BACKGROUND_H, GAMEPLAY_BACKGROUND_W,
+                    gameplay_background_sprite);
+    LCD_Draw_Sprite(0, 0, STREET_OVERLAY_H, STREET_OVERLAY_W,
+                    street_overlay_sprite);
 }
 
 static void draw_camel(int x, int y, CamelPose pose)
