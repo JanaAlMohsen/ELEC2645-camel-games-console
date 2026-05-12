@@ -3,6 +3,7 @@
 #include "InputHandler.h"
 #include "Joystick.h"
 #include "Buzzer.h"
+#include "GameMenuBackground.h"
 #include "stm32l4xx_hal.h"
 #include <stdio.h>
 
@@ -66,24 +67,15 @@ static void menu_led_white(void)
 static void render_home_menu(MenuSystem* menu)
 {
     LCD_Fill_Buffer(2);
-
-    LCD_Draw_Rect(0, 148, 240, 92, 3, 1);
-    for (uint8_t i = 0; i < 7; i++) {
-        LCD_Draw_Line(40 + i * 24, 178, 28 + i * 24, 188, 7);
-    }
-    LCD_Draw_Circle(120, 160, 48, 7, 1);
-    LCD_Draw_Rect(70, 160, 100, 26, 7, 1);
-
-    LCD_printString("Tame", 72, 18, 3, 4);
-    LCD_printString("game console", 58, 52, 0, 1);
+    LCD_Draw_Sprite(0, 0, GAME_MENU_BG_HEIGHT, GAME_MENU_BG_WIDTH, game_menu_bg);
 
     for (int i = 0; i < NUM_MENU_OPTIONS; i++) {
-        uint16_t y_pos = 82 + (i * 48);
+        uint16_t y_pos = 96 + (i * 48);
         uint8_t fill_colour = (i == menu->selected_option) ? 6 : 7;
         uint8_t text_colour = (i == menu->selected_option) ? 3 : 0;
 
-        LCD_Draw_Rect(30, y_pos, 180, 34, fill_colour, 1);
-        LCD_Draw_Rect(30, y_pos, 180, 34, 3, 0);
+        LCD_Draw_Rect(28, y_pos, 184, 34, fill_colour, 1);
+        LCD_Draw_Rect(28, y_pos, 184, 34, 3, 0);
 
         if (i == menu->selected_option) {
             LCD_Draw_Rect(36, y_pos + 8, 12, 18, 3, 1);
@@ -92,9 +84,6 @@ static void render_home_menu(MenuSystem* menu)
 
         LCD_printString((char*)menu_options[i], 58, y_pos + 10, text_colour, 2);
     }
-
-    LCD_printString("up/down", 76, 206, 1, 1);
-    LCD_printString("BTN2 select", 66, 222, 1, 1);
 
     LCD_Refresh(&cfg0);
 }

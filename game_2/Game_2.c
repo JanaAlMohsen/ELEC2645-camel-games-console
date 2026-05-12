@@ -74,6 +74,10 @@ static uint8_t selected_food = 0;
 static uint8_t carrying_food = 0;
 static uint8_t full_chime_played[4] = {0, 0, 0, 0};
 static uint32_t rainbow_party_until = 0;
+static uint8_t care_music_index = 0;
+static uint8_t care_music_note_active = 0;
+static uint32_t care_music_next_note = 0;
+static uint32_t care_music_note_off = 0;
 
 static void RGB_Off(void)
 {
@@ -244,6 +248,57 @@ static void play_success_chime(void)
     buzzer_off(&buzzer_cfg);
 }
 
+static void care_music_stop(void)
+{
+    care_music_note_active = 0;
+    buzzer_off(&buzzer_cfg);
+}
+
+static void care_music_reset(void)
+{
+    care_music_index = 0;
+    care_music_note_active = 0;
+    care_music_next_note = HAL_GetTick() + 900;
+    care_music_note_off = 0;
+}
+
+static void care_music_update(void)
+{
+    static const Buzzer_Note_t notes[] = {
+        NOTE_E5, NOTE_G5, NOTE_A5, NOTE_G5,
+        NOTE_D5, NOTE_E5, NOTE_G5, NOTE_E5
+    };
+    static const uint16_t durations[] = {120, 120, 190, 150, 140, 120, 180, 320};
+    uint32_t now = HAL_GetTick();
+
+    if (current_screen == PET_SCREEN_BEDROOM && bedroom_sleeping) {
+        return;
+    }
+
+    if (care_music_note_active) {
+        if (now >= care_music_note_off) {
+            buzzer_off(&buzzer_cfg);
+            care_music_note_active = 0;
+            care_music_next_note = now + 420;
+        }
+        return;
+    }
+
+    if (now < care_music_next_note || now < rainbow_party_until || buzzer_is_running(&buzzer_cfg)) {
+        return;
+    }
+
+    buzzer_note(&buzzer_cfg, notes[care_music_index], 5);
+    care_music_note_off = now + durations[care_music_index];
+    care_music_note_active = 1;
+    care_music_index++;
+
+    if (care_music_index >= (sizeof(notes) / sizeof(notes[0]))) {
+        care_music_index = 0;
+        care_music_next_note = now + 1400;
+    }
+}
+
 static void draw_stat_row(const char *label, int y, int value, uint8_t colour, int option)
 {
     uint8_t text_colour = selected_stat == option ? COL_BROWN : COL_BLACK;
@@ -288,6 +343,7 @@ static void update_full_chime_state(void)
     if (room_index >= 0 && values[room_index] >= 100 && !full_chime_played[room_index]) {
         full_chime_played[room_index] = 1;
         rainbow_party_until = HAL_GetTick() + 2500;
+        care_music_stop();
         play_success_chime();
     }
 }
@@ -349,6 +405,13 @@ static void draw_food_icon(int x, int y, uint8_t food)
     LCD_Draw_Sprite(x - 10, y - 10, FOOD_SPRITE_SIZE, FOOD_SPRITE_SIZE, food_sprites[food]);
 }
 
+static void draw_cursor_cross(int x, int y, uint8_t colour)
+{
+    LCD_Draw_Line(x - 7, y, x + 7, y, colour);
+    LCD_Draw_Line(x, y - 7, x, y + 7, colour);
+    LCD_Draw_Rect(x - 2, y - 2, 5, 5, colour, 0);
+}
+
 static void draw_food_selection(void)
 {
     const uint16_t xs[] = {28, 84, 144, 204};
@@ -376,7 +439,7 @@ static void render_kitchen(void)
         draw_food_icon(tool_x, tool_y, selected_food);
     }
     else {
-        LCD_Draw_Rect(tool_x - 4, tool_y - 4, 9, 9, COL_BLACK, 0);
+        draw_cursor_cross(tool_x, tool_y, COL_BLACK);
     }
 
     draw_room_stat("Hunger", hunger, COL_ORANGE);
@@ -518,6 +581,7 @@ static void update_room(Direction direction)
             if (!full_chime_played[3]) {
                 full_chime_played[3] = 1;
                 rainbow_party_until = HAL_GetTick() + 2500;
+                care_music_stop();
                 play_success_chime();
             }
             bedroom_sleeping = 0;
@@ -622,6 +686,7 @@ MenuState Game2_Run(void)
     buzzer_off(&buzzer_cfg);
     show_care_cover();
     apply_game1_result_if_needed();
+    care_music_reset();
 
     while (1)
     {
@@ -658,6 +723,7 @@ MenuState Game2_Run(void)
 
             if (current_input.btn2_pressed) {
                 if (selected_stat == 4) {
+                    care_music_stop();
                     RGB_Off();
                     return MENU_STATE_HOME;
                 }
@@ -666,16 +732,30 @@ MenuState Game2_Run(void)
         }
         else {
             if (current_screen == PET_SCREEN_KITCHEN && !carrying_food) {
-                if (current_direction == E && last_direction != E) {
+                if (tool_over_back_button()) {
+                    if ((current_direction == S || current_direction == E) && last_direction != current_direction) {
+                        tool_x = 36 + selected_food * 56;
+                        tool_y = 202;
+                        current_direction = CENTRE;
+                    }
+                }
+                else if (current_direction == N && last_direction != N) {
+                    tool_x = 18;
+                    tool_y = 18;
+                    current_direction = CENTRE;
+                }
+                else if (current_direction == E && last_direction != E) {
                     selected_food++;
                     if (selected_food > 3) selected_food = 0;
                     tool_x = 36 + selected_food * 56;
                     tool_y = 202;
+                    current_direction = CENTRE;
                 }
                 else if (current_direction == W && last_direction != W) {
                     selected_food = selected_food == 0 ? 3 : selected_food - 1;
                     tool_x = 36 + selected_food * 56;
                     tool_y = 202;
+                    current_direction = CENTRE;
                 }
             }
 
@@ -692,6 +772,7 @@ MenuState Game2_Run(void)
         }
 
         if (current_screen == PET_SCREEN_DASHBOARD && current_input.btn3_pressed) {
+            care_music_stop();
             RGB_Off();
             return MENU_STATE_HOME;
         }
@@ -711,6 +792,7 @@ MenuState Game2_Run(void)
 
         clamp_stats();
         update_full_chime_state();
+        care_music_update();
         update_rgb_status();
         render_current_screen();
 
