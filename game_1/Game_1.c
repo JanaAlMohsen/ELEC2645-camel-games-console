@@ -70,6 +70,23 @@ extern Joystick_t joystick_data;
 #define CAMEL_DUCK_FRAMES 13
 #define CAMEL_JUMP_HEIGHT 34
 #define CAMEL_DUCK_DROP 12
+#define SCORE_FLASH_STEP 500
+
+// RGB LED pins from the gameplay breadboard wiring. Both are common cathode:
+// GPIO HIGH turns that colour on.
+#define RGB1_R_PORT GPIOA
+#define RGB1_R_PIN  GPIO_PIN_9
+#define RGB1_G_PORT GPIOC
+#define RGB1_G_PIN  GPIO_PIN_7
+#define RGB1_B_PORT GPIOC
+#define RGB1_B_PIN  GPIO_PIN_8
+
+#define RGB2_R_PORT GPIOC
+#define RGB2_R_PIN  GPIO_PIN_9
+#define RGB2_G_PORT GPIOD
+#define RGB2_G_PIN  GPIO_PIN_2
+#define RGB2_B_PORT GPIOA
+#define RGB2_B_PIN  GPIO_PIN_5
 
 // 3 fixed lane centre positions. This makes the game easier to control.
 static const int lane_x[3] = {55, 120, 185};
@@ -118,6 +135,7 @@ static int sfx_timer;
 static int game_over_sound_step;
 static int game_over_sound_timer;
 static uint8_t game_over_sound_done;
+static int next_score_flash;
 
 typedef enum {
     CAMEL_BACK = 0,
@@ -131,9 +149,18 @@ typedef enum {
     CAMEL_ACTION_DUCK
 } CamelAction;
 
+typedef struct {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    int timer;
+    int blink_frames;
+} RgbEffect;
+
 static CamelPose camel_pose;
 static CamelAction camel_action;
 static int camel_action_timer;
+static RgbEffect rgb_effects[2];
 
 static void reset_game(void);
 static void update_game(void);
@@ -165,6 +192,9 @@ static void play_sfx(uint32_t freq_hz, uint8_t volume_percent, int frames);
 static void update_tension_music(void);
 static void start_game_over_sound(void);
 static void update_game_over_sound(void);
+static void rgb_all_off(void);
+static void rgb_start_flash(int led, uint8_t r, uint8_t g, uint8_t b, int frames, int blink_frames);
+static void rgb_update_effects(void);
 
 static void reset_game(void)
 {
@@ -188,6 +218,10 @@ static void reset_game(void)
     game_over_sound_step = 0;
     game_over_sound_timer = 0;
     game_over_sound_done = 1;
+    next_score_flash = SCORE_FLASH_STEP;
+    rgb_effects[0].timer = 0;
+    rgb_effects[1].timer = 0;
+    rgb_all_off();
     buzzer_off(&buzzer_cfg);
 
     for (int i = 0; i < MAX_OBJECTS; i++) {
@@ -240,6 +274,61 @@ static int get_camel_draw_y(void)
     }
 
     return PLAYER_Y;
+}
+
+static void rgb_write_led(int led, uint8_t r, uint8_t g, uint8_t b)
+{
+    if (led == 0) {
+        HAL_GPIO_WritePin(RGB1_R_PORT, RGB1_R_PIN, r ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(RGB1_G_PORT, RGB1_G_PIN, g ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(RGB1_B_PORT, RGB1_B_PIN, b ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    }
+    else {
+        HAL_GPIO_WritePin(RGB2_R_PORT, RGB2_R_PIN, r ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(RGB2_G_PORT, RGB2_G_PIN, g ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(RGB2_B_PORT, RGB2_B_PIN, b ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    }
+}
+
+static void rgb_all_off(void)
+{
+    rgb_write_led(0, 0, 0, 0);
+    rgb_write_led(1, 0, 0, 0);
+}
+
+static void rgb_start_flash(int led, uint8_t r, uint8_t g, uint8_t b, int frames, int blink_frames)
+{
+    if (led < 0 || led > 1) {
+        return;
+    }
+
+    rgb_effects[led].r = r;
+    rgb_effects[led].g = g;
+    rgb_effects[led].b = b;
+    rgb_effects[led].timer = frames;
+    rgb_effects[led].blink_frames = blink_frames;
+}
+
+static void rgb_update_effects(void)
+{
+    for (int led = 0; led < 2; led++) {
+        if (rgb_effects[led].timer > 0) {
+            int blink_frames = rgb_effects[led].blink_frames;
+            if (blink_frames < 1) {
+                blink_frames = 1;
+            }
+
+            uint8_t on = ((rgb_effects[led].timer / blink_frames) % 2) == 1;
+            rgb_write_led(led,
+                          on ? rgb_effects[led].r : 0,
+                          on ? rgb_effects[led].g : 0,
+                          on ? rgb_effects[led].b : 0);
+            rgb_effects[led].timer--;
+        }
+        else {
+            rgb_write_led(led, 0, 0, 0);
+        }
+    }
 }
 
 static void play_sfx(uint32_t freq_hz, uint8_t volume_percent, int frames)
@@ -497,6 +586,26 @@ static void update_game(void)
         score_multiplier_timer--;
     }
 
+    if (score >= next_score_flash) {
+        static const uint8_t milestone_colours[][3] = {
+            {0, 0, 1},  // blue
+            {0, 1, 0},  // green
+            {1, 1, 0},  // yellow
+            {1, 0, 1},  // purple
+            {0, 1, 1},  // cyan
+            {1, 1, 1}   // white
+        };
+        int colour_index = (next_score_flash / SCORE_FLASH_STEP - 1) %
+                           (int)(sizeof(milestone_colours) / sizeof(milestone_colours[0]));
+        rgb_start_flash(1,
+                        milestone_colours[colour_index][0],
+                        milestone_colours[colour_index][1],
+                        milestone_colours[colour_index][2],
+                        24,
+                        3);
+        next_score_flash += SCORE_FLASH_STEP;
+    }
+
     // Speed increases slowly as the score goes up.
     int speed = 4 + (score / 140);
     if (speed > 11) {
@@ -525,21 +634,25 @@ static void update_game(void)
             if (object_is_dodged(&objects[i])) {
                 score += 10 * score_multiplier;
                 objects[i].active = 0;
+                rgb_start_flash(1, 0, 1, 0, 12, 3);
                 play_sfx(980, 8, 3);
             }
             else if (object_is_collectible(objects[i].type)) {
                 if (objects[i].type == OBJ_DATE) {
                     score_multiplier_timer = DATE_MULTIPLIER_FRAMES;
+                    rgb_start_flash(1, 1, 0, 1, 24, 4);
                     play_sfx(1200, 12, 4);
                 }
                 else if (objects[i].type == OBJ_WATER) {
                     if (lives < MAX_LIVES) {
                         lives++;
                     }
+                    rgb_start_flash(0, 0, 0, 1, 18, 3);
                     play_sfx(1500, 13, 4);
                 }
                 else {
                     score += COIN_BONUS_POINTS * score_multiplier;
+                    rgb_start_flash(1, 1, 1, 0, 16, 3);
                     play_sfx(1700, 13, 4);
                 }
 
@@ -548,6 +661,7 @@ static void update_game(void)
             else if (lives > 1) {
                 lives--;
                 objects[i].active = 0;
+                rgb_start_flash(0, 1, 0, 0, 20, 3);
                 play_sfx(260, 12, 5);
             }
             else {
@@ -556,6 +670,8 @@ static void update_game(void)
                     high_score = score;
                 }
                 PWM_SetDuty(&pwm_cfg, 5);
+                rgb_start_flash(0, 1, 0, 0, 48, 2);
+                rgb_start_flash(1, 1, 0, 0, 48, 2);
                 start_game_over_sound();
                 return;
             }
@@ -567,6 +683,7 @@ static void update_game(void)
     }
 
     update_tension_music();
+    rgb_update_effects();
 
     // LED gets brighter as the score rises, giving extra visual feedback.
     int brightness = 20 + (score / 8);
@@ -883,6 +1000,7 @@ MenuState Game1_Run(void)
         if (current_input.btn3_pressed) {
             PWM_SetDuty(&pwm_cfg, 50);
             buzzer_off(&buzzer_cfg);
+            rgb_all_off();
             LCD_Set_Palette(PALETTE_CUSTOM);
             return MENU_STATE_HOME;
         }
@@ -899,6 +1017,7 @@ MenuState Game1_Run(void)
             if (runner_state == GAME_OVER) {
                 render_game_over();
                 update_game_over_sound();
+                rgb_update_effects();
             }
             else {
                 render_game();
@@ -913,6 +1032,7 @@ MenuState Game1_Run(void)
             else {
                 render_game_over();
                 update_game_over_sound();
+                rgb_update_effects();
             }
         }
 
