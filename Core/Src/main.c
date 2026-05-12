@@ -62,6 +62,7 @@ void PeriphCommonClock_Config(void);
 // Menu System and Input
 #include "Menu.h"      // Menu state machine and UI
 #include "InputHandler.h" // Input reading
+#include "IntroScreens.h" // Startup pixel art screens
 
 #include <stdint.h>
 #include <stdio.h>
@@ -189,23 +190,51 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   }
 }
 
+static void Play_Intro_Tone(Buzzer_Note_t note, uint32_t duration_ms)
+{
+    buzzer_note(&buzzer_cfg, note, 12);
+    HAL_Delay(duration_ms);
+    buzzer_off(&buzzer_cfg);
+    HAL_Delay(35);
+}
+
+static void Play_Intro_Tune(void)
+{
+    Play_Intro_Tone(NOTE_E5, 90);
+    Play_Intro_Tone(NOTE_G5, 90);
+    Play_Intro_Tone(NOTE_A5, 120);
+    Play_Intro_Tone(NOTE_E5, 160);
+}
+
 void Show_Studio_Splash(void)
 {
-    LCD_Fill_Buffer(2); // blue
-    LCD_printString("SARAJANA", 55, 75, 0, 3);   // black
-    LCD_printString("STUDIOS", 65, 110, 0, 3);   // black
-    LCD_printString("presents...", 55, 150, 0, 2); // black
+    LCD_Fill_Buffer(2);
+    LCD_Draw_Sprite(0, 20, INTRO_SCREEN_HEIGHT, INTRO_SCREEN_WIDTH, intro_studio_sprite);
     LCD_Refresh(&cfg0);
-    HAL_Delay(1800);
+    Play_Intro_Tune();
+    HAL_Delay(1150);
 }
 
 
 void Show_Title_Screen(void)
 {
-    LCD_Fill_Buffer(2); // blue
-    LCD_printString("TAME", 45, 90, 3, 5); // brown
+    LCD_Fill_Buffer(2);
+    LCD_Draw_Sprite(0, 20, INTRO_SCREEN_HEIGHT, INTRO_SCREEN_WIDTH, intro_title_sprite);
     LCD_Refresh(&cfg0);
     HAL_Delay(1800);
+}
+
+static void LED1_Set(uint8_t r, uint8_t g, uint8_t b)
+{
+    // LED1 is wired as: PA9=green, PC7=blue, PC8=red.
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, r ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, g ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, b ? GPIO_PIN_SET : GPIO_PIN_RESET);
+
+    // LED2 mirrors LED1 using the planned wiring: PC9=red, PD2=green, PA5=blue.
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, r ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, g ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, b ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
 
@@ -224,6 +253,8 @@ int main(void)
 
     /* Initialize peripherals */
     MX_GPIO_Init();
+    LED1_Set(1, 1, 1);
+
     MX_USART2_UART_Init();
     MX_ADC1_Init();  // Initialize ADC for joystick
     MX_RNG_Init();   // Initialize RNG (if used by games)
