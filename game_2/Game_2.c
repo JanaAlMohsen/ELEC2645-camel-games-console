@@ -58,13 +58,20 @@ typedef enum {
     PET_SCREEN_BEDROOM
 } PetScreen;
 
+typedef enum {
+    STAT_HUNGER = 0,
+    STAT_HEALTH,
+    STAT_CLEANLINESS,
+    STAT_ENERGY,
+    STAT_BACK
+} PetStatOption;
+
 static int hunger = 70;
 static int health = 70;
 static int cleanliness = 70;
 static int energy = 70;
 
-// 0 = Hunger, 1 = Health, 2 = Cleanliness, 3 = Energy, 4 = Back
-static int selected_stat = 0;
+static int selected_stat = STAT_HUNGER;
 static PetScreen current_screen = PET_SCREEN_DASHBOARD;
 static int tool_x = 36;
 static int tool_y = 178;
@@ -78,6 +85,10 @@ static uint8_t care_music_index = 0;
 static uint8_t care_music_note_active = 0;
 static uint32_t care_music_next_note = 0;
 static uint32_t care_music_note_off = 0;
+
+/* -------------------------------------------------------------------------- */
+/* LED helpers                                                                 */
+/* -------------------------------------------------------------------------- */
 
 static void RGB_Off(void)
 {
@@ -101,6 +112,10 @@ static void RGB_Set(uint8_t r, uint8_t g, uint8_t b)
     HAL_GPIO_WritePin(LED2_G_PORT, LED2_G_PIN, g ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(LED2_B_PORT, LED2_B_PIN, b ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
+
+/* -------------------------------------------------------------------------- */
+/* General game helpers                                                        */
+/* -------------------------------------------------------------------------- */
 
 static void show_care_cover(void)
 {
@@ -145,10 +160,10 @@ static void update_rgb_status(void)
     }
 
     if (current_screen == PET_SCREEN_DASHBOARD) {
-        if (selected_stat == 0) stat_value = hunger;
-        else if (selected_stat == 1) stat_value = health;
-        else if (selected_stat == 2) stat_value = cleanliness;
-        else if (selected_stat == 3) stat_value = energy;
+        if (selected_stat == STAT_HUNGER) stat_value = hunger;
+        else if (selected_stat == STAT_HEALTH) stat_value = health;
+        else if (selected_stat == STAT_CLEANLINESS) stat_value = cleanliness;
+        else if (selected_stat == STAT_ENERGY) stat_value = energy;
     }
     else if (current_screen == PET_SCREEN_KITCHEN) {
         stat_value = hunger;
@@ -205,6 +220,10 @@ static void draw_pet(int x, int y, uint8_t scale)
     }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Shared drawing helpers                                                      */
+/* -------------------------------------------------------------------------- */
+
 static void draw_background(const uint8_t *background)
 {
     LCD_Fill_Buffer(COL_BLACK);
@@ -247,6 +266,10 @@ static void play_success_chime(void)
     HAL_Delay(85);
     buzzer_off(&buzzer_cfg);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Care mode background music                                                  */
+/* -------------------------------------------------------------------------- */
 
 static void care_music_stop(void)
 {
@@ -322,10 +345,10 @@ static uint8_t current_room_stat_full(void)
 
 static int current_room_stat_index(void)
 {
-    if (current_screen == PET_SCREEN_KITCHEN) return 0;
-    if (current_screen == PET_SCREEN_DOCTOR) return 1;
-    if (current_screen == PET_SCREEN_BATH) return 2;
-    if (current_screen == PET_SCREEN_BEDROOM) return 3;
+    if (current_screen == PET_SCREEN_KITCHEN) return STAT_HUNGER;
+    if (current_screen == PET_SCREEN_DOCTOR) return STAT_HEALTH;
+    if (current_screen == PET_SCREEN_BATH) return STAT_CLEANLINESS;
+    if (current_screen == PET_SCREEN_BEDROOM) return STAT_ENERGY;
     return -1;
 }
 
@@ -333,7 +356,7 @@ static void update_full_chime_state(void)
 {
     int values[] = {hunger, health, cleanliness, energy};
 
-    for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t i = STAT_HUNGER; i <= STAT_ENERGY; i++) {
         if (values[i] < 100) {
             full_chime_played[i] = 0;
         }
@@ -378,15 +401,19 @@ static void draw_confetti_message(void)
 static void render_dashboard(void)
 {
     draw_background(room_main_bg);
-    draw_back_arrow_button(selected_stat == 4);
-    draw_stat_row("Hunger", 18, hunger, COL_ORANGE, 0);
-    draw_stat_row("Health", 40, health, COL_SAGE, 1);
-    draw_stat_row("Cleanliness", 62, cleanliness, COL_BLUE, 2);
-    draw_stat_row("Energy", 84, energy, COL_LAVENDER, 3);
+    draw_back_arrow_button(selected_stat == STAT_BACK);
+    draw_stat_row("Hunger", 18, hunger, COL_ORANGE, STAT_HUNGER);
+    draw_stat_row("Health", 40, health, COL_SAGE, STAT_HEALTH);
+    draw_stat_row("Cleanliness", 62, cleanliness, COL_BLUE, STAT_CLEANLINESS);
+    draw_stat_row("Energy", 84, energy, COL_LAVENDER, STAT_ENERGY);
 
     draw_pet(72, 118, 3);
     LCD_Refresh(&cfg0);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Room rendering                                                              */
+/* -------------------------------------------------------------------------- */
 
 static const char* food_label(uint8_t food)
 {
@@ -541,21 +568,25 @@ static void enter_selected_room(void)
 {
     reset_room_tool();
 
-    if (selected_stat == 0) {
+    if (selected_stat == STAT_HUNGER) {
         current_screen = PET_SCREEN_KITCHEN;
         tool_x = 36 + selected_food * 56;
         tool_y = 202;
     }
-    else if (selected_stat == 1) {
+    else if (selected_stat == STAT_HEALTH) {
         current_screen = PET_SCREEN_DOCTOR;
     }
-    else if (selected_stat == 2) {
+    else if (selected_stat == STAT_CLEANLINESS) {
         current_screen = PET_SCREEN_BATH;
     }
-    else if (selected_stat == 3) {
+    else if (selected_stat == STAT_ENERGY) {
         current_screen = PET_SCREEN_BEDROOM;
     }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Room controls and game logic                                                */
+/* -------------------------------------------------------------------------- */
 
 static void move_tool(Direction direction)
 {
@@ -578,8 +609,8 @@ static void update_room(Direction direction)
         if (HAL_GetTick() - sleep_start > 2500) {
             energy = 100;
             clamp_stats();
-            if (!full_chime_played[3]) {
-                full_chime_played[3] = 1;
+            if (!full_chime_played[STAT_ENERGY]) {
+                full_chime_played[STAT_ENERGY] = 1;
                 rainbow_party_until = HAL_GetTick() + 2500;
                 care_music_stop();
                 play_success_chime();
@@ -672,6 +703,10 @@ static void apply_game1_result_if_needed(void)
     clamp_stats();
 }
 
+/* -------------------------------------------------------------------------- */
+/* Main care mode loop                                                         */
+/* -------------------------------------------------------------------------- */
+
 MenuState Game2_Run(void)
 {
     static Direction last_direction = CENTRE;
@@ -697,32 +732,34 @@ MenuState Game2_Run(void)
         Direction current_direction = joystick_data.direction;
 
         if (current_screen == PET_SCREEN_DASHBOARD) {
+            // The back arrow sits to the left of the stat list, so a left push
+            // deliberately jumps to it instead of moving through the list.
             if (current_direction == W && last_direction != W) {
-                selected_stat = 4;
+                selected_stat = STAT_BACK;
             }
-            else if (current_direction == E && last_direction != E && selected_stat == 4) {
-                selected_stat = 0;
+            else if (current_direction == E && last_direction != E && selected_stat == STAT_BACK) {
+                selected_stat = STAT_HUNGER;
             }
             else if (current_direction == S && last_direction != S) {
-                if (selected_stat == 4) {
-                    selected_stat = 0;
+                if (selected_stat == STAT_BACK) {
+                    selected_stat = STAT_HUNGER;
                 }
                 else {
                     selected_stat++;
                 }
-                if (selected_stat > 4) selected_stat = 0;
+                if (selected_stat > STAT_BACK) selected_stat = STAT_HUNGER;
             }
             else if (current_direction == N && last_direction != N) {
-                if (selected_stat == 4) {
-                    selected_stat = 0;
+                if (selected_stat == STAT_BACK) {
+                    selected_stat = STAT_HUNGER;
                 }
                 else {
-                    selected_stat = selected_stat == 0 ? 3 : selected_stat - 1;
+                    selected_stat = selected_stat == STAT_HUNGER ? STAT_ENERGY : selected_stat - 1;
                 }
             }
 
             if (current_input.btn2_pressed) {
-                if (selected_stat == 4) {
+                if (selected_stat == STAT_BACK) {
                     care_music_stop();
                     RGB_Off();
                     return MENU_STATE_HOME;
@@ -781,6 +818,9 @@ MenuState Game2_Run(void)
 
         if (HAL_GetTick() - last_decay > 3000) {
             last_decay = HAL_GetTick();
+
+            // A tiny bit of decay keeps the pet feeling alive while the player
+            // is deciding what to do next.
             hunger--;
             cleanliness--;
             energy--;
