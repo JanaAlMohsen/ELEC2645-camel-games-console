@@ -12,7 +12,7 @@ extern Joystick_cfg_t joystick_cfg;
 extern Joystick_t joystick_data;
 extern Buzzer_cfg_t buzzer_cfg;
 
-// Menu options
+// menu options
 static const char* menu_options[] = {
     "Desert Run",
     "Care Mode"
@@ -53,12 +53,12 @@ static void play_menu_select_tone(void)
 
 static void menu_led_white(void)
 {
-    // LED1 is wired as: PA9=green, PC7=blue, PC8=red.
+    // same rgb wiring as care mode
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
 
-    // LED2 mirrors LED1 using the planned wiring: PC9=red, PD2=green, PA5=blue.
+    // second led copies the first one
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
     HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_SET);
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
@@ -130,7 +130,7 @@ MenuState Menu_Run(MenuSystem* menu)
 
         last_direction = current_direction;
 
-        // PC2 button = BTN2 = selector
+        // btn2 selects the highlighted option
         if (current_input.btn2_pressed) {
             play_menu_select_tone();
 
