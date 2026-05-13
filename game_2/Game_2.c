@@ -86,9 +86,7 @@ static uint8_t care_music_note_active = 0;
 static uint32_t care_music_next_note = 0;
 static uint32_t care_music_note_off = 0;
 
-/* -------------------------------------------------------------------------- */
-/* LED helpers                                                                 */
-/* -------------------------------------------------------------------------- */
+// rgb led helpers
 
 static void RGB_Off(void)
 {
@@ -102,20 +100,18 @@ static void RGB_Off(void)
 
 static void RGB_Set(uint8_t r, uint8_t g, uint8_t b)
 {
-    // LED1 is wired as: PA9=green, PC7=blue, PC8=red.
+    // led1 ended up wired like this after testing
     HAL_GPIO_WritePin(LED1_B_PORT, LED1_B_PIN, r ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(LED1_R_PORT, LED1_R_PIN, g ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(LED1_G_PORT, LED1_G_PIN, b ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
-    // LED2 mirrors LED1 using the planned wiring: PC9=red, PD2=green, PA5=blue.
+    // led2 just copies the same colour
     HAL_GPIO_WritePin(LED2_R_PORT, LED2_R_PIN, r ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(LED2_G_PORT, LED2_G_PIN, g ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(LED2_B_PORT, LED2_B_PIN, b ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
-/* -------------------------------------------------------------------------- */
-/* General game helpers                                                        */
-/* -------------------------------------------------------------------------- */
+// small setup stuff
 
 static void show_care_cover(void)
 {
@@ -131,6 +127,7 @@ static void show_care_cover(void)
 
 static void clamp_stats(void)
 {
+    // keeps the bars inside the 0 to 100 range
     if (hunger > 100) hunger = 100;
     if (health > 100) health = 100;
     if (cleanliness > 100) cleanliness = 100;
@@ -148,6 +145,7 @@ static void update_rgb_status(void)
     uint32_t now = HAL_GetTick();
 
     if (now < rainbow_party_until) {
+        // quick colour cycle for the full stat celebration
         uint8_t step = (now / 45) % 12;
 
         if (step == 0 || step == 1) RGB_Set(1, 0, 0);
@@ -159,6 +157,7 @@ static void update_rgb_status(void)
         return;
     }
 
+    // dashboard follows the stat currently highlighted
     if (current_screen == PET_SCREEN_DASHBOARD) {
         if (selected_stat == STAT_HUNGER) stat_value = hunger;
         else if (selected_stat == STAT_HEALTH) stat_value = health;
@@ -191,6 +190,7 @@ static void update_rgb_status(void)
 
 static void draw_bar(int x, int y, int value, uint8_t colour)
 {
+    // same bar size is used on every care screen
     LCD_Draw_Rect(x, y, 76, 9, COL_BLACK, 0);
     LCD_Draw_Rect(x + 1, y + 1, (value * 74) / 100, 7, colour, 1);
 }
@@ -205,8 +205,7 @@ static void draw_pet(int x, int y, uint8_t scale)
                 continue;
             }
 
-            // The room backgrounds use palette index 10 for green.
-            // Older camel art used index 10 for warm shadow, so remap it here.
+            // my camel sprite used this colour before i changed the room palette
             if (pixel == 10) {
                 pixel = COL_NOSE;
             }
@@ -220,9 +219,7 @@ static void draw_pet(int x, int y, uint8_t scale)
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Shared drawing helpers                                                      */
-/* -------------------------------------------------------------------------- */
+// things that are drawn on more than one screen
 
 static void draw_background(const uint8_t *background)
 {
@@ -267,9 +264,7 @@ static void play_success_chime(void)
     buzzer_off(&buzzer_cfg);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Care mode background music                                                  */
-/* -------------------------------------------------------------------------- */
+// quiet background tune for care mode
 
 static void care_music_stop(void)
 {
@@ -308,6 +303,7 @@ static void care_music_update(void)
     }
 
     if (now < care_music_next_note || now < rainbow_party_until || buzzer_is_running(&buzzer_cfg)) {
+        // leave space for button sounds and the success chime
         return;
     }
 
@@ -364,6 +360,7 @@ static void update_full_chime_state(void)
 
     int room_index = current_room_stat_index();
     if (room_index >= 0 && values[room_index] >= 100 && !full_chime_played[room_index]) {
+        // only play the full sound once until the stat drops again
         full_chime_played[room_index] = 1;
         rainbow_party_until = HAL_GetTick() + 2500;
         care_music_stop();
@@ -411,9 +408,7 @@ static void render_dashboard(void)
     LCD_Refresh(&cfg0);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Room rendering                                                              */
-/* -------------------------------------------------------------------------- */
+// drawing each room
 
 static const char* food_label(uint8_t food)
 {
@@ -584,9 +579,7 @@ static void enter_selected_room(void)
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Room controls and game logic                                                */
-/* -------------------------------------------------------------------------- */
+// room controls and stat changes
 
 static void move_tool(Direction direction)
 {
@@ -607,6 +600,7 @@ static void update_room(Direction direction)
 {
     if (current_screen == PET_SCREEN_BEDROOM && bedroom_sleeping) {
         if (HAL_GetTick() - sleep_start > 2500) {
+            // wait a bit on the dark screen before going back
             energy = 100;
             clamp_stats();
             if (!full_chime_played[STAT_ENERGY]) {
@@ -622,12 +616,14 @@ static void update_room(Direction direction)
     }
 
     if (current_screen == PET_SCREEN_KITCHEN && !carrying_food && (direction == E || direction == W)) {
+        // left and right pick food here instead of moving the cursor
         return;
     }
 
     move_tool(direction);
 
     if (current_screen == PET_SCREEN_KITCHEN && carrying_food && close_to(tool_x, tool_y, 118, 148, 28)) {
+        // food counts when it reaches the mouth area
         hunger += food_value(selected_food);
         energy += 1;
         carrying_food = 0;
@@ -703,9 +699,7 @@ static void apply_game1_result_if_needed(void)
     clamp_stats();
 }
 
-/* -------------------------------------------------------------------------- */
-/* Main care mode loop                                                         */
-/* -------------------------------------------------------------------------- */
+// main care mode loop
 
 MenuState Game2_Run(void)
 {
@@ -732,8 +726,7 @@ MenuState Game2_Run(void)
         Direction current_direction = joystick_data.direction;
 
         if (current_screen == PET_SCREEN_DASHBOARD) {
-            // The back arrow sits to the left of the stat list, so a left push
-            // deliberately jumps to it instead of moving through the list.
+            // left selects the back arrow because it sits beside the stat list
             if (current_direction == W && last_direction != W) {
                 selected_stat = STAT_BACK;
             }
@@ -819,8 +812,7 @@ MenuState Game2_Run(void)
         if (HAL_GetTick() - last_decay > 3000) {
             last_decay = HAL_GetTick();
 
-            // A tiny bit of decay keeps the pet feeling alive while the player
-            // is deciding what to do next.
+            // stats slowly go down so the camel still needs looking after
             hunger--;
             cleanliness--;
             energy--;
