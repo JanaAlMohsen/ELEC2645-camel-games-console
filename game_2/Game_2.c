@@ -88,6 +88,7 @@ static uint32_t care_music_note_off = 0;
 
 // rgb led helpers
 
+// turns both rgb leds off
 static void RGB_Off(void)
 {
     HAL_GPIO_WritePin(LED1_R_PORT, LED1_R_PIN, GPIO_PIN_RESET);
@@ -98,6 +99,7 @@ static void RGB_Off(void)
     HAL_GPIO_WritePin(LED2_B_PORT, LED2_B_PIN, GPIO_PIN_RESET);
 }
 
+// sets both rgb leds to the colour passed in
 static void RGB_Set(uint8_t r, uint8_t g, uint8_t b)
 {
     // led1 ended up wired like this after testing
@@ -113,6 +115,7 @@ static void RGB_Set(uint8_t r, uint8_t g, uint8_t b)
 
 // small setup stuff
 
+// shows the care mode cover before the actual pet screen
 static void show_care_cover(void)
 {
     RGB_Set(1, 1, 1);
@@ -125,6 +128,7 @@ static void show_care_cover(void)
     HAL_Delay(1110);
 }
 
+// makes sure none of the stats go below 0 or above 100
 static void clamp_stats(void)
 {
     // keeps the bars inside the 0 to 100 range
@@ -139,6 +143,7 @@ static void clamp_stats(void)
     if (energy < 0) energy = 0;
 }
 
+// changes the rgb led depending on the selected stat or celebration
 static void update_rgb_status(void)
 {
     int stat_value = 100;
@@ -177,6 +182,7 @@ static void update_rgb_status(void)
         stat_value = energy;
     }
 
+    // red is low, white is ok, green is good
     if (stat_value < 35) {
         RGB_Set(1, 0, 0);
     }
@@ -188,6 +194,7 @@ static void update_rgb_status(void)
     }
 }
 
+// draws a simple filled stat bar
 static void draw_bar(int x, int y, int value, uint8_t colour)
 {
     // same bar size is used on every care screen
@@ -195,6 +202,7 @@ static void draw_bar(int x, int y, int value, uint8_t colour)
     LCD_Draw_Rect(x + 1, y + 1, (value * 74) / 100, 7, colour, 1);
 }
 
+// draws the camel sprite bigger by scaling each pixel
 static void draw_pet(int x, int y, uint8_t scale)
 {
     for (uint8_t row = 0; row < 32; row++) {
@@ -221,17 +229,20 @@ static void draw_pet(int x, int y, uint8_t scale)
 
 // things that are drawn on more than one screen
 
+// clears the screen then draws one of my room backgrounds
 static void draw_background(const uint8_t *background)
 {
     LCD_Fill_Buffer(COL_BLACK);
     LCD_Draw_Sprite(0, 0, ROOM_BG_HEIGHT, ROOM_BG_WIDTH, background);
 }
 
+// checks if the cursor is on top of the back button
 static uint8_t tool_over_back_button(void)
 {
     return tool_x >= 6 && tool_x <= 30 && tool_y >= 6 && tool_y <= 30;
 }
 
+// draws the little back arrow square in the corner
 static void draw_back_arrow_button(uint8_t selected)
 {
     uint8_t fill_colour = selected ? COL_CREAM : COL_WHITE;
@@ -242,17 +253,20 @@ static void draw_back_arrow_button(uint8_t selected)
     LCD_Draw_Line(14, 18, 24, 18, COL_BROWN);
 }
 
+// room version of the back button uses the cursor hover state
 static void draw_room_back_button(void)
 {
     draw_back_arrow_button(tool_over_back_button());
 }
 
+// draws the stat bar shown at the bottom of each room
 static void draw_room_stat(const char *label, int value, uint8_t colour)
 {
     LCD_printString((char*)label, 8, 228, COL_BLACK, 1);
     draw_bar(76, 228, value, colour);
 }
 
+// short sound for when a care task is finished
 static void play_success_chime(void)
 {
     buzzer_note(&buzzer_cfg, NOTE_G5, 14);
@@ -266,12 +280,14 @@ static void play_success_chime(void)
 
 // quiet background tune for care mode
 
+// stops the care mode music when another sound needs to play
 static void care_music_stop(void)
 {
     care_music_note_active = 0;
     buzzer_off(&buzzer_cfg);
 }
 
+// starts the care mode tune from the beginning
 static void care_music_reset(void)
 {
     care_music_index = 0;
@@ -280,6 +296,7 @@ static void care_music_reset(void)
     care_music_note_off = 0;
 }
 
+// plays the care mode tune without blocking the whole game loop
 static void care_music_update(void)
 {
     static const Buzzer_Note_t notes[] = {
@@ -290,11 +307,13 @@ static void care_music_update(void)
     uint32_t now = HAL_GetTick();
 
     if (current_screen == PET_SCREEN_BEDROOM && bedroom_sleeping) {
+        // no music while the lights are off
         return;
     }
 
     if (care_music_note_active) {
         if (now >= care_music_note_off) {
+            // turn the note off so it sounds softer
             buzzer_off(&buzzer_cfg);
             care_music_note_active = 0;
             care_music_next_note = now + 420;
@@ -318,6 +337,7 @@ static void care_music_update(void)
     }
 }
 
+// one row on the main dashboard with label and bar
 static void draw_stat_row(const char *label, int y, int value, uint8_t colour, int option)
 {
     uint8_t text_colour = selected_stat == option ? COL_BROWN : COL_BLACK;
@@ -330,6 +350,7 @@ static void draw_stat_row(const char *label, int y, int value, uint8_t colour, i
     draw_bar(132, y, value, colour);
 }
 
+// checks if the stat for the current room is already full
 static uint8_t current_room_stat_full(void)
 {
     if (current_screen == PET_SCREEN_KITCHEN) return hunger >= 100;
@@ -339,6 +360,7 @@ static uint8_t current_room_stat_full(void)
     return 0;
 }
 
+// maps each room to its matching stat
 static int current_room_stat_index(void)
 {
     if (current_screen == PET_SCREEN_KITCHEN) return STAT_HUNGER;
@@ -348,6 +370,7 @@ static int current_room_stat_index(void)
     return -1;
 }
 
+// handles the full stat chime and rainbow led timing
 static void update_full_chime_state(void)
 {
     int values[] = {hunger, health, cleanliness, energy};
@@ -368,6 +391,7 @@ static void update_full_chime_state(void)
     }
 }
 
+// message shown when the current room stat is full
 static const char* current_room_full_message(void)
 {
     if (current_screen == PET_SCREEN_KITCHEN) return "full hunger!";
@@ -376,6 +400,7 @@ static const char* current_room_full_message(void)
     return "full energy!";
 }
 
+// draws the small celebration box and confetti pieces
 static void draw_confetti_message(void)
 {
     if (!current_room_stat_full()) {
@@ -387,6 +412,7 @@ static void draw_confetti_message(void)
     LCD_Draw_Rect(50, 48, 140, 28, COL_BROWN, 0);
     LCD_printString((char*)current_room_full_message(), 64, 58, COL_BROWN, 1);
 
+    // tiny fake confetti squares
     for (uint8_t i = 0; i < 8; i++) {
         uint16_t x = 28 + i * 25;
         uint16_t y = 28 + ((i * 9 + shift) % 70);
@@ -395,6 +421,7 @@ static void draw_confetti_message(void)
     }
 }
 
+// draws the main care mode screen with all four stats
 static void render_dashboard(void)
 {
     draw_background(room_main_bg);
@@ -410,23 +437,27 @@ static void render_dashboard(void)
 
 // drawing each room
 
+// text label for the selected kitchen food
 static const char* food_label(uint8_t food)
 {
     static const char *labels[] = {"Kabsa", "Dates", "Gahwa", "Basboosa"};
     return labels[food];
 }
 
+// how much each food fills hunger
 static int food_value(uint8_t food)
 {
     static const int values[] = {25, 12, 8, 18};
     return values[food];
 }
 
+// draws a food sprite centred around the given point
 static void draw_food_icon(int x, int y, uint8_t food)
 {
     LCD_Draw_Sprite(x - 10, y - 10, FOOD_SPRITE_SIZE, FOOD_SPRITE_SIZE, food_sprites[food]);
 }
 
+// simple cross cursor used when not holding food
 static void draw_cursor_cross(int x, int y, uint8_t colour)
 {
     LCD_Draw_Line(x - 7, y, x + 7, y, colour);
@@ -434,6 +465,7 @@ static void draw_cursor_cross(int x, int y, uint8_t colour)
     LCD_Draw_Rect(x - 2, y - 2, 5, 5, colour, 0);
 }
 
+// draws the food row at the bottom of the kitchen
 static void draw_food_selection(void)
 {
     const uint16_t xs[] = {28, 84, 144, 204};
@@ -448,6 +480,7 @@ static void draw_food_selection(void)
     LCD_printString((char*)food_label(selected_food), 80, 218, COL_BLACK, 1);
 }
 
+// draws the kitchen room and feeding cursor
 static void render_kitchen(void)
 {
     draw_background(room_kitchen_bg);
@@ -469,6 +502,7 @@ static void render_kitchen(void)
     LCD_Refresh(&cfg0);
 }
 
+// draws the bathroom and redraws the tub front over the camel
 static void render_bath(void)
 {
     uint8_t bubble_shift = (HAL_GetTick() / 220) % 18;
@@ -478,6 +512,7 @@ static void render_bath(void)
     LCD_printString("BATH", 92, 8, COL_WHITE, 2);
 
     draw_pet(90, 82, 2);
+    // draw the front of the tub again so the camel looks inside it
     for (uint8_t i = 0; i < 34; i++) {
         uint16_t y = 128 + i;
         uint16_t inset = i / 3;
@@ -485,6 +520,7 @@ static void render_bath(void)
     }
     LCD_Draw_Line(46, 128, 198, 128, COL_WHITE);
     LCD_Draw_Line(54, 162, 190, 162, COL_GREY);
+    // bubbles move up a little each frame
     LCD_Draw_Circle(70, 106 - bubble_shift, 3, COL_WHITE, 1);
     LCD_Draw_Circle(168, 116 - bubble_shift, 4, COL_WHITE, 1);
     LCD_Draw_Circle(190, 96 - bubble_shift, 3, COL_WHITE, 1);
@@ -495,6 +531,7 @@ static void render_bath(void)
     LCD_Refresh(&cfg0);
 }
 
+// draws the doctor room with the bandage tool
 static void render_doctor(void)
 {
     draw_background(room_doctor_bg);
@@ -507,6 +544,7 @@ static void render_doctor(void)
     LCD_Refresh(&cfg0);
 }
 
+// draws the bedroom or the dark sleeping screen
 static void render_bedroom(void)
 {
     if (bedroom_sleeping) {
@@ -524,6 +562,7 @@ static void render_bedroom(void)
     draw_room_back_button();
     LCD_printString("BEDROOM", 70, 8, COL_BROWN, 2);
     draw_pet(82, 118, 2);
+    // cross cursor for clicking the light switch
     LCD_Draw_Rect(tool_x - 3, tool_y - 3, 7, 7, COL_BLACK, 0);
     LCD_Draw_Line(tool_x - 7, tool_y, tool_x + 7, tool_y, COL_BLACK);
     LCD_Draw_Line(tool_x, tool_y - 7, tool_x, tool_y + 7, COL_BLACK);
@@ -532,6 +571,7 @@ static void render_bedroom(void)
     LCD_Refresh(&cfg0);
 }
 
+// picks which screen to render based on the current state
 static void render_current_screen(void)
 {
     if (current_screen == PET_SCREEN_DASHBOARD) {
@@ -551,6 +591,7 @@ static void render_current_screen(void)
     }
 }
 
+// puts the tool/cursor back to a sensible starting place
 static void reset_room_tool(void)
 {
     tool_x = 36;
@@ -559,6 +600,7 @@ static void reset_room_tool(void)
     carrying_food = 0;
 }
 
+// opens the correct room from the selected dashboard stat
 static void enter_selected_room(void)
 {
     reset_room_tool();
@@ -581,6 +623,7 @@ static void enter_selected_room(void)
 
 // room controls and stat changes
 
+// moves the cursor but keeps it inside the screen area
 static void move_tool(Direction direction)
 {
     if (direction == N && tool_y > 24) tool_y -= 10;
@@ -589,6 +632,7 @@ static void move_tool(Direction direction)
     if (direction == E && tool_x < 222) tool_x += 10;
 }
 
+// rough distance check for cursor interactions
 static uint8_t close_to(int x, int y, int target_x, int target_y, int range)
 {
     int dx = x - target_x;
@@ -596,6 +640,7 @@ static uint8_t close_to(int x, int y, int target_x, int target_y, int range)
     return (dx * dx + dy * dy) < (range * range);
 }
 
+// updates room interactions that happen while moving the joystick
 static void update_room(Direction direction)
 {
     if (current_screen == PET_SCREEN_BEDROOM && bedroom_sleeping) {
@@ -638,6 +683,7 @@ static void update_room(Direction direction)
     }
 }
 
+// handles btn2 inside each room
 static void handle_room_button(void)
 {
     if (tool_over_back_button()) {
@@ -669,6 +715,7 @@ static void handle_room_button(void)
     }
 }
 
+// takes the result from game 1 and changes the camel stats once
 static void apply_game1_result_if_needed(void)
 {
     Game1Summary summary;
@@ -701,11 +748,13 @@ static void apply_game1_result_if_needed(void)
 
 // main care mode loop
 
+// runs care mode until the player goes back to the menu
 MenuState Game2_Run(void)
 {
     static Direction last_direction = CENTRE;
     static uint32_t last_decay = 0;
 
+    // reset the main care mode state each time game 2 starts
     RGB_Off();
     current_screen = PET_SCREEN_DASHBOARD;
     bedroom_sleeping = 0;
@@ -719,8 +768,10 @@ MenuState Game2_Run(void)
 
     while (1)
     {
+        // frame_start is used to keep the game speed steady
         uint32_t frame_start = HAL_GetTick();
 
+        // read input once each frame
         Input_Read();
         Joystick_Read(&joystick_cfg, &joystick_data);
         Direction current_direction = joystick_data.direction;
@@ -762,6 +813,7 @@ MenuState Game2_Run(void)
         }
         else {
             if (current_screen == PET_SCREEN_KITCHEN && !carrying_food) {
+                // kitchen has its own menu style control for the foods
                 if (tool_over_back_button()) {
                     if ((current_direction == S || current_direction == E) && last_direction != current_direction) {
                         tool_x = 36 + selected_food * 56;
@@ -792,10 +844,12 @@ MenuState Game2_Run(void)
             update_room(current_direction);
 
             if (current_input.btn2_pressed) {
+                // btn2 does the main action for whatever room is open
                 handle_room_button();
             }
 
             if (current_input.btn3_pressed) {
+                // joystick switch is a quick return to the care dashboard
                 current_screen = PET_SCREEN_DASHBOARD;
                 bedroom_sleeping = 0;
             }
@@ -809,6 +863,7 @@ MenuState Game2_Run(void)
 
         last_direction = current_direction;
 
+        // every few seconds the pet gets a little less cared for
         if (HAL_GetTick() - last_decay > 3000) {
             last_decay = HAL_GetTick();
 
@@ -828,6 +883,7 @@ MenuState Game2_Run(void)
         update_rgb_status();
         render_current_screen();
 
+        // small delay so the loop does not run too fast
         uint32_t frame_time = HAL_GetTick() - frame_start;
         if (frame_time < GAME2_FRAME_TIME_MS) {
             HAL_Delay(GAME2_FRAME_TIME_MS - frame_time);
