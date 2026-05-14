@@ -3,33 +3,29 @@
 
 #include <stdint.h>
 
-// ========================================
-// INPUT SYSTEM - Simple State
-// ========================================
+// Shared button input state.
 
 /**
- * @brief Simple input state structure
+ * @brief Button presses captured for one frame.
  * 
- * Store the current input state. Main loop checks this to determine
- * what happened this frame.
+ * The interrupt code sets the raw button flags, then Input_Read copies them
+ * here so the menu and games can react once per press.
  */
 typedef struct {
-    uint8_t btn2_pressed;  // 1 if BT2 was pressed this frame, 0 otherwise
-    uint8_t btn3_pressed;  // 1 if BT3 was pressed this frame, 0 otherwise
+    uint8_t btn2_pressed;  // BT2 was pressed this frame.
+    uint8_t btn3_pressed;  // BT3 was pressed this frame.
 } InputState;
 
-// Global input state (read by menu/games in their Update functions)
+// Global button state read by the menu and games.
 extern InputState current_input;
 
 /**
- * @brief Initialize button input system
- * Must be called in main() after GPIO initialization
+ * @brief Reset the button input state after GPIO setup.
  */
 void Input_Init(void);
 
 /**
- * @brief Read current input state
- * Called once per frame by main loop before Update
+ * @brief Copy any new button presses into current_input.
  */
 void Input_Read(void);
 

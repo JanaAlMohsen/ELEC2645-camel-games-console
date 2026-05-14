@@ -1,16 +1,15 @@
 #include "InputHandler.h"
 #include "main.h"
 
-// Global input state
+// Button state used by the menu and games.
 InputState current_input = {0};
 
-// Track button presses in interrupt
+// Raw button flags are set inside the interrupt, then consumed once per frame.
 static volatile uint8_t btn2_raw_press = 0;
 static volatile uint8_t btn3_raw_press = 0;
 
 void Input_Init(void) {
-    // GPIO and EXTI already initialized by MX_GPIO_Init() in main.c
-    // Just reset the state
+    // GPIO/EXTI setup happens in main.c; this just clears the button state.
     current_input.btn2_pressed = 0;
     current_input.btn3_pressed = 0;
     btn2_raw_press = 0;
@@ -18,41 +17,37 @@ void Input_Init(void) {
 }
 
 void Input_Read(void) {
-    // Copy the button press flags from interrupt to current input state
-    // This is read once per frame by the main loop
+    // Copy interrupt flags into the frame state.
     current_input.btn2_pressed = btn2_raw_press;
     current_input.btn3_pressed = btn3_raw_press;
     
-    // Reset the flags after reading so they only trigger once
+    // Clear the raw flags so each press is only handled once.
     btn2_raw_press = 0;
     btn3_raw_press = 0;
 }
 
-// ===== INTERRUPT CALLBACK FOR BUTTONS =====
-// Called by hardware when button is pressed
+// Hardware callback for the button interrupt lines.
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
     static uint32_t last_btn2_interrupt = 0;
     static uint32_t last_btn3_interrupt = 0;
     uint32_t current_time = HAL_GetTick();
     
-    // Handle BT2
+    // BT2: start/select/restart depending on the current screen.
     if (GPIO_Pin == BTN2_Pin) {
-        // Software debouncing (200ms)
+        // Simple debounce so one press does not become several presses.
         if ((current_time - last_btn2_interrupt) > 200) {
             last_btn2_interrupt = current_time;
             
-            // Set flag indicating button was pressed
             btn2_raw_press = 1;
         }
     }
     
-    // Handle BT3 (joystick button)
+    // BT3: mostly used to return to the menu.
     if (GPIO_Pin == BTN3_Pin) {
-        // Software debouncing (200ms)
+        // Simple debounce so one press does not become several presses.
         if ((current_time - last_btn3_interrupt) > 200) {
             last_btn3_interrupt = current_time;
             
-            // Set flag indicating button was pressed
             btn3_raw_press = 1;
         }
     }
