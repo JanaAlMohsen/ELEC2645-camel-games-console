@@ -3,37 +3,32 @@
 
 #include <stdint.h>
 
-// ==============================================
-// MENU STATE MACHINE
-// ==============================================
+// Shared menu states.
 
 typedef enum {
-    MENU_STATE_HOME = 0,        // Main menu - select game
-    MENU_STATE_GAME_1,          // Running Game 1
-    MENU_STATE_GAME_2,          // Running Game 2
-    MENU_STATE_GAME_3,          // Running Game 3
+    MENU_STATE_HOME = 0,        // Main game selection screen.
+    MENU_STATE_GAME_1,          // Desert Run.
+    MENU_STATE_GAME_2,          // Care Mode.
+    MENU_STATE_GAME_3,          // Kept as a spare slot from the template.
 } MenuState;
 
-// Menu system structure
+// Current menu selection.
 typedef struct {
-    uint8_t selected_option;    // Which menu option is highlighted (0-2)
+    uint8_t selected_option;    // Highlighted option on the menu.
 } MenuSystem;
 
-// ==============================================
-// INITIALIZATION AND STATE MANAGEMENT
-// ==============================================
-
 /**
- * @brief Initialize the menu system
+ * @brief Start the menu on the first option.
  */
 void Menu_Init(MenuSystem* menu);
 
 /**
- * @brief Run the menu - displays menu and waits for selection
+ * @brief Show the menu and wait until a game is selected.
  * 
- * Runs its own loop and returns the selected game state.
+ * The menu owns the screen while it is running, then returns the selected game
+ * state to main().
  * 
- * @return MenuState - The game that was selected (GAME_1, GAME_2, or GAME_3)
+ * @return MenuState The selected game state.
  */
 MenuState Menu_Run(MenuSystem* menu);
 

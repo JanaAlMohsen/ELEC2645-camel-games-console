@@ -6,14 +6,14 @@
 /**
  * @brief Game 1 - Desert Run
  * 
- * Runs Hamoodi's desert runner game. Game 1 has its own loop, sprites,
- * scoring, obstacle handling, sound, and LED feedback while still using the
- * shared menu/input utilities.
+ * Runs Hamoodi's desert runner game. Game 1 handles its own sprites, score,
+ * obstacles, sound, and LED feedback, but still uses the shared menu and input
+ * code.
  * 
- * The menu system calls this function when Game 1 is selected.
- * The function runs its own loop and returns when the game exits.
+ * The menu calls this when Game 1 is selected. The function keeps control until
+ * the player exits back to the menu.
  * 
- * @return MenuState - Where to go next (typically MENU_STATE_HOME for menu)
+ * @return MenuState Where the program should go next.
  */
 
 MenuState Game1_Run(void);

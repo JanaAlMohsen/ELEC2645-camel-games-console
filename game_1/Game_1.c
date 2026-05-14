@@ -26,7 +26,9 @@ extern Joystick_t joystick_data;
 
 /*
  * Game 1: Desert Run
- * Hamoodi runs down a three-lane desert road, dodging hazards and grabbing bonuses along the way The joystick handles lane changes, jumps, and ducks
+ * Hamoodi runs down a three-lane desert road, dodging hazards and picking up
+ * bonuses. The joystick controls lane changes, jumps, and ducks.
+ *
  * Controls:
  *   Joystick LEFT/RIGHT  = switch lanes
  *   Joystick UP/DOWN     = jump / duck
@@ -36,7 +38,7 @@ extern Joystick_t joystick_data;
 
 #define GAME1_FRAME_TIME_MS 35
 
-// Palette slots used by the Game 1 sprites and UI
+// Palette slots used by the Game 1 sprites and screen text.
 #define COL_BLACK      0
 #define COL_WHITE      1
 #define COL_SKY        2
@@ -72,8 +74,8 @@ extern Joystick_t joystick_data;
 #define CAMEL_DUCK_DROP 12
 #define SCORE_FLASH_STEP 500
 
-// RGB LED pins from the breadboard wiring
-// Both LEDs are common cathode, so GPIO HIGH turns that colour on
+// RGB LED pins from the breadboard wiring.
+// The LEDs are common cathode, so setting a colour pin HIGH turns it on.
 #define RGB1_R_PORT GPIOA
 #define RGB1_R_PIN  GPIO_PIN_9
 #define RGB1_G_PORT GPIOC
@@ -88,17 +90,17 @@ extern Joystick_t joystick_data;
 #define RGB2_B_PORT GPIOA
 #define RGB2_B_PIN  GPIO_PIN_5
 
-// Centre x positions for the three road lanes
+// Centre x positions for the three road lanes.
 static const int lane_x[3] = {55, 120, 185};
 
-// Main game state
+// Main screens/states for the runner.
 typedef enum {
     GAME_START_SCREEN = 0,
     GAME_RUNNING,
     GAME_OVER
 } RunnerState;
 
-// Everything that can travel down the road
+// Objects that can travel down the road.
 typedef enum {
     OBJ_ROCK = 0,
     OBJ_CACTUS,
@@ -110,7 +112,7 @@ typedef enum {
     OBJ_COIN
 } ObjectType;
 
-// One active road object
+// Stores one object while it is moving down the screen.
 typedef struct {
     uint8_t active;
     int lane;
@@ -140,21 +142,21 @@ static int game_over_sound_timer;
 static uint8_t game_over_sound_done;
 static int next_score_flash;
 
-// Which way Hamoodi should be drawn this frame
+// Hamoodi's facing direction while he is running or changing lanes.
 typedef enum {
     CAMEL_BACK = 0,
     CAMEL_FACE_LEFT,
     CAMEL_FACE_RIGHT
 } CamelPose;
 
-// Extra actions that change Hamoodi's y position or sprite
+// Extra movement actions used for the eagle/crack obstacles.
 typedef enum {
     CAMEL_ACTION_NORMAL = 0,
     CAMEL_ACTION_JUMP,
     CAMEL_ACTION_DUCK
 } CamelAction;
 
-// One active blink pattern for one RGB LED
+// One temporary blink pattern for one RGB LED.
 typedef struct {
     uint8_t r;
     uint8_t g;
@@ -168,7 +170,7 @@ static CamelAction camel_action;
 static int camel_action_timer;
 static RgbEffect rgb_effects[2];
 
-// Local helpers for the runner
+// Local helper functions for the runner.
 static void reset_game(void);
 static void update_game(void);
 static void render_start_screen(void);
@@ -205,7 +207,7 @@ static void rgb_update_effects(void);
 
 static void reset_game(void)
 {
-    player_lane = 1;       // Hamoodi starts in the middle lane
+    player_lane = 1;       // Start Hamoodi in the middle lane.
     target_lane = player_lane;
     player_x = lane_x[player_lane];
     score = 0;
@@ -239,7 +241,7 @@ static void reset_game(void)
     }
 }
 
-// Diagonals count too, so the joystick still feels responsive
+// Diagonal joystick directions count too, which makes the controls feel less stiff.
 static uint8_t joystick_left(Direction dir)
 {
     return (dir == W || dir == NW || dir == SW);
@@ -284,11 +286,11 @@ static int get_camel_draw_y(void)
     return PLAYER_Y;
 }
 
-// LED and buzzer helpers
+// RGB LED and buzzer helpers.
 static void rgb_write_led(int led, uint8_t r, uint8_t g, uint8_t b)
 {
     if (led == 0) {
-        // RGB1 is wired with red and blue swapped compared with the pin names
+        // RGB1 came out swapped on the real breadboard, so red and blue are flipped here.
         HAL_GPIO_WritePin(RGB1_R_PORT, RGB1_R_PIN, b ? GPIO_PIN_SET : GPIO_PIN_RESET);
         HAL_GPIO_WritePin(RGB1_G_PORT, RGB1_G_PIN, g ? GPIO_PIN_SET : GPIO_PIN_RESET);
         HAL_GPIO_WritePin(RGB1_B_PORT, RGB1_B_PIN, r ? GPIO_PIN_SET : GPIO_PIN_RESET);
@@ -438,7 +440,7 @@ static void update_game_over_sound(void)
     game_over_sound_step++;
 }
 
-// Object spawning and collision
+// Object spawning and collision checks.
 static void spawn_object(void)
 {
     for (int i = 0; i < MAX_OBJECTS; i++) {
@@ -447,7 +449,7 @@ static void spawn_object(void)
             objects[i].lane = rand() % 3;
             objects[i].y = 28;
 
-            // Mostly hazards, with a few collectibles mixed in
+            // Mostly spawn hazards, with a few collectibles mixed in.
             int r = rand() % 18;
             if (r == 0) {
                 objects[i].type = OBJ_WATER;
@@ -499,7 +501,7 @@ static uint8_t object_hits_player(DesertObject *obj)
         return 0;
     }
 
-    // Lane matching is checked first, so this only needs the vertical overlap.
+    // The lane has already matched, so now only the vertical overlap matters.
     if ((obj->y + OBJECT_H) >= PLAYER_Y && obj->y <= (PLAYER_Y + PLAYER_H)) {
         return 1;
     }
@@ -507,13 +509,13 @@ static uint8_t object_hits_player(DesertObject *obj)
     return 0;
 }
 
-// Main gameplay update.
+// Main gameplay update for one frame.
 static void update_game(void)
 {
     Direction dir = joystick_data.direction;
 
-    // Trigger one lane change per joystick push instead of repeating while held.
-    // Hamoodi faces sideways during the move, then returns to the back view.
+    // Only start one lane change per joystick push. Hamoodi faces sideways
+    // during the slide, then returns to the back view.
     uint8_t camel_is_switching_lanes = (player_x != lane_x[target_lane]);
 
     if (!camel_is_switching_lanes && joystick_left(dir) && !joystick_left(last_direction)) {
@@ -561,7 +563,7 @@ static void update_game(void)
         }
     }
 
-    // Once Hamoodi reaches the lane, lock it in and show the normal back view.
+    // Once Hamoodi reaches the lane, lock it in and switch back to the rear sprite.
     if (player_x == target_x) {
         player_lane = target_lane;
         camel_pose = CAMEL_BACK;
@@ -612,7 +614,7 @@ static void update_game(void)
         next_score_flash += SCORE_FLASH_STEP;
     }
 
-    // The run gets faster as the score rises.
+    // Increase the road speed gradually as the score rises.
     int speed = 4 + (score / 140);
     if (speed > 11) {
         speed = 11;
@@ -691,7 +693,7 @@ static void update_game(void)
     update_tension_music();
     rgb_update_effects();
 
-    // The screen/backlight feedback ramps up with the score.
+    // The LCD backlight gets brighter as the run goes on.
     int brightness = 20 + (score / 8);
     if (brightness > 100) {
         brightness = 100;
@@ -699,7 +701,7 @@ static void update_game(void)
     PWM_SetDuty(&pwm_cfg, brightness);
 }
 
-// Rendering.
+// Drawing functions.
 static void draw_background(void)
 {
     LCD_Draw_Sprite(0, 0, GAMEPLAY_BACKGROUND_H, GAMEPLAY_BACKGROUND_W,
@@ -710,7 +712,7 @@ static void draw_background(void)
 
 static void draw_camel(int x, int y, CamelPose pose)
 {
-    // Normal running is from behind. Jumping and ducking use the action sprite.
+    // Normal running uses the rear/side sprites. Jumping and ducking use one action sprite.
     if (camel_action != CAMEL_ACTION_NORMAL) {
         LCD_Draw_Sprite(x + 4, y + 2, CAMEL_ACTION_SPRITE_H, CAMEL_ACTION_SPRITE_W,
                         camel_action_sprite);
@@ -909,7 +911,7 @@ MenuState Game1_Run(void)
     high_score = 0;
     reset_game();
 
-    // Make each run spawn a different order of objects.
+    // Use the current time so the object order is different each run.
     srand(HAL_GetTick());
 
     buzzer_tone(&buzzer_cfg, 950, 10);
@@ -922,7 +924,7 @@ MenuState Game1_Run(void)
         Input_Read();
         Joystick_Read(&joystick_cfg, &joystick_data);
 
-        // BT3 is the quick way back to the shared menu.
+        // BT3 exits Game 1 and returns to the shared menu.
         if (current_input.btn3_pressed) {
             PWM_SetDuty(&pwm_cfg, 50);
             buzzer_off(&buzzer_cfg);
